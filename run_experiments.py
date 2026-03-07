@@ -139,13 +139,19 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
         val_metrics = evaluate(model, test_loader, criterion, device, 'rnn')
         val_loss = val_metrics['loss']
         val_f1 = val_metrics['macro_f1']
+        val_weighted_f1 = val_metrics['weighted_f1']
+        val_balanced_acc = val_metrics['balanced_accuracy']
+        val_acc = val_metrics['accuracy']
         
         train_losses.append(train_loss)
         val_losses.append(val_loss)
         
-        print(f"Epoch {epoch+1}/{CONFIG['num_epochs']}: "
-              f"Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, "
-              f"Val F1={val_f1:.4f}")
+        print(
+            f"Epoch {epoch+1}/{CONFIG['num_epochs']}: "
+            f"Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, "
+            f"Macro-F1={val_f1:.4f}, Weighted-F1={val_weighted_f1:.4f}, "
+            f"Bal-Acc={val_balanced_acc:.4f}, Acc={val_acc:.4f}"
+        )
         
         # Early stopping
         if best_metrics is None or val_f1 > best_f1:
@@ -214,13 +220,19 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
         val_metrics = evaluate(model, test_loader, criterion, device, 'transformer')
         val_loss = val_metrics['loss']
         val_f1 = val_metrics['macro_f1']
+        val_weighted_f1 = val_metrics['weighted_f1']
+        val_balanced_acc = val_metrics['balanced_accuracy']
+        val_acc = val_metrics['accuracy']
         
         train_losses.append(train_loss)
         val_losses.append(val_loss)
         
-        print(f"Epoch {epoch+1}/{CONFIG['num_epochs']}: "
-              f"Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, "
-              f"Val F1={val_f1:.4f}")
+        print(
+            f"Epoch {epoch+1}/{CONFIG['num_epochs']}: "
+            f"Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, "
+            f"Macro-F1={val_f1:.4f}, Weighted-F1={val_weighted_f1:.4f}, "
+            f"Bal-Acc={val_balanced_acc:.4f}, Acc={val_acc:.4f}"
+        )
         
         # Early stopping
         if best_metrics is None or val_f1 > best_f1:
