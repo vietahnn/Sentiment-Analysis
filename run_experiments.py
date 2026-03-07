@@ -407,12 +407,12 @@ def run_all_experiments(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run sentiment analysis experiments')
-    parser.add_argument('--data-path', type=str, default='data.xlsx',
-                       help='Path to dataset file (default: data.xlsx)')
-    parser.add_argument('--models-dir', type=str, default='models',
-                       help='Directory to save model checkpoints (default: models)')
-    parser.add_argument('--output-dir', type=str, default='.',
-                       help='Directory to save results (default: current directory)')
+    parser.add_argument('--data-path', type=str, default='/kaggle/input/datasets/nguyenthanhvung/sentiment-analysis/data.xlsx',
+                       help='Path to dataset file on Kaggle input storage')
+    parser.add_argument('--models-dir', type=str, default='/kaggle/working/Sentiment-Analysis/models',
+                       help='Directory to save model checkpoints on Kaggle working storage')
+    parser.add_argument('--output-dir', type=str, default='/kaggle/working/Sentiment-Analysis',
+                       help='Directory to save results on Kaggle working storage')
     parser.add_argument('--epochs', type=int, default=50,
                        help='Number of training epochs (default: 50)')
     parser.add_argument('--patience', type=int, default=5,

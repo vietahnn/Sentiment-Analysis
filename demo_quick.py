@@ -16,8 +16,8 @@ warnings.filterwarnings('ignore')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Quick demo test')
-    parser.add_argument('--data-path', type=str, default='data.xlsx',
-                       help='Path to dataset file (default: data.xlsx)')
+    parser.add_argument('--data-path', type=str, default='/kaggle/input/datasets/nguyenthanhvung/sentiment-analysis/data.xlsx',
+                       help='Path to dataset file on Kaggle input storage')
     parser.add_argument('--samples', type=int, default=200,
                        help='Number of samples to test (default: 200)')
     args = parser.parse_args()

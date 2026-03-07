@@ -236,10 +236,10 @@ def generate_all_figures():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate paper figures')
-    parser.add_argument('--input-dir', type=str, default='.',
-                       help='Directory containing results files (default: current directory)')
-    parser.add_argument('--output-dir', type=str, default='figures',
-                       help='Directory to save figures (default: figures)')
+    parser.add_argument('--input-dir', type=str, default='/kaggle/working/Sentiment-Analysis',
+                       help='Directory containing results files on Kaggle working storage')
+    parser.add_argument('--output-dir', type=str, default='/kaggle/working/Sentiment-Analysis/figures',
+                       help='Directory to save figures on Kaggle working storage')
     global args
     args = parser.parse_args()
     

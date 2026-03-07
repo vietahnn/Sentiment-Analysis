@@ -16,10 +16,10 @@ import argparse
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Test trained models')
-    parser.add_argument('--data-path', type=str, default='data.xlsx',
-                       help='Path to dataset file (default: data.xlsx)')
-    parser.add_argument('--models-dir', type=str, default='models',
-                       help='Directory containing model checkpoints (default: models)')
+    parser.add_argument('--data-path', type=str, default='/kaggle/input/datasets/nguyenthanhvung/sentiment-analysis/data.xlsx',
+                       help='Path to dataset file on Kaggle input storage')
+    parser.add_argument('--models-dir', type=str, default='/kaggle/working/Sentiment-Analysis/models',
+                       help='Directory containing model checkpoints on Kaggle working storage')
     parser.add_argument('--model', type=str, default=None,
                        help='Test specific model (e.g., LSTM, PhoBERT)')
     parser.add_argument('--strategy', type=str, default='hybrid',
