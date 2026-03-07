@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
 import pandas as pd
+import argparse
+import os
 
 # Set style
 plt.style.use('seaborn-v0_8-paper')
@@ -22,7 +24,8 @@ def plot_training_curves():
     print("Generating Figure 1: Training loss curves...")
     
     # Load training history
-    with open('training_history.json', 'r') as f:
+    history_path = os.path.join(args.input_dir, 'training_history.json')
+    with open(history_path, 'r') as f:
         history = json.load(f)
     
     # Select models to plot (best performing ones with hybrid strategy)
@@ -232,4 +235,18 @@ def generate_all_figures():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Generate paper figures')
+    parser.add_argument('--input-dir', type=str, default='.',
+                       help='Directory containing results files (default: current directory)')
+    parser.add_argument('--output-dir', type=str, default='figures',
+                       help='Directory to save figures (default: figures)')
+    global args
+    args = parser.parse_args()
+    
+    # Create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    print(f"Input directory: {args.input_dir}")
+    print(f"Output directory: {args.output_dir}")
+    
     generate_all_figures()

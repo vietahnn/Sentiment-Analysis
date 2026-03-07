@@ -13,6 +13,7 @@ from train_models import *
 import time
 import json
 import os
+import argparse
 from collections import defaultdict
 
 # Configuration
@@ -101,7 +102,8 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
             best_metrics = val_metrics
             patience_counter = 0
             # Save best model
-            torch.save(model.state_dict(), f'models/{model_name}_{strategy}_best.pt')
+            model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
+            torch.save(model.state_dict(), model_path)
         else:
             patience_counter += 1
         
@@ -173,7 +175,8 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
             best_f1 = val_f1
             best_metrics = val_metrics
             patience_counter = 0
-            torch.save(model.state_dict(), f'models/{model_name}_{strategy}_best.pt')
+            model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
+            torch.save(model.state_dict(), model_path)
         else:
             patience_counter += 1
         
@@ -193,7 +196,7 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
     return best_metrics
 
 
-def run_all_experiments():
+def run_all_experiments(args):
     """Run complete experimental pipeline"""
     
     print("="*60)
@@ -202,7 +205,8 @@ def run_all_experiments():
     
     # Load data
     print("\n1. Loading data...")
-    df = load_data('data.xlsx')
+    print(f"Data path: {args.data_path}")
+    df = load_data(args.data_path)
     
     # Split data chronologically
     train_size = int(0.8 * len(df))
@@ -220,9 +224,8 @@ def run_all_experiments():
     y_test = test_df['sentiment_label'].values
     
     # Create model save directory
-    import os
-    os.makedirs('models', exist_ok=True)
-    os.makedirs('figures', exist_ok=True)
+    os.makedirs(args.models_dir, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
     
     # Strategies to test
     strategies = ['none', 'class_weights', 'smote', 'hybrid']
@@ -383,23 +386,60 @@ def run_all_experiments():
     print("="*60)
     
     # Convert to DataFrames and save
-    pd.DataFrame(all_results['overall_performance']).to_csv('results_table2_overall.csv', index=False)
-    pd.DataFrame(all_results['per_class_performance']).to_csv('results_table3_perclass.csv', index=False)
+    table2_path = os.path.join(args.output_dir, 'results_table2_overall.csv')
+    table3_path = os.path.join(args.output_dir, 'results_table3_perclass.csv')
+    history_path = os.path.join(args.output_dir, 'training_history.json')
+    
+    pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
+    pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
     
     # Save training history
-    with open('training_history.json', 'w') as f:
+    with open(history_path, 'w') as f:
         json.dump(all_results['training_history'], f, indent=2)
     
     print("\n✓ Results saved to:")
-    print("  - results_table2_overall.csv")
-    print("  - results_table3_perclass.csv")
-    print("  - training_history.json")
+    print(f"  - {table2_path}")
+    print(f"  - {table3_path}")
+    print(f"  - {history_path}")
     
     return all_results
 
 
 if __name__ == '__main__':
-    results = run_all_experiments()
+    parser = argparse.ArgumentParser(description='Run sentiment analysis experiments')
+    parser.add_argument('--data-path', type=str, default='data.xlsx',
+                       help='Path to dataset file (default: data.xlsx)')
+    parser.add_argument('--models-dir', type=str, default='models',
+                       help='Directory to save model checkpoints (default: models)')
+    parser.add_argument('--output-dir', type=str, default='.',
+                       help='Directory to save results (default: current directory)')
+    parser.add_argument('--epochs', type=int, default=50,
+                       help='Number of training epochs (default: 50)')
+    parser.add_argument('--patience', type=int, default=5,
+                       help='Early stopping patience (default: 5)')
+    parser.add_argument('--batch-size-rnn', type=int, default=16,
+                       help='Batch size for RNN models (default: 16)')
+    parser.add_argument('--batch-size-transformer', type=int, default=8,
+                       help='Batch size for Transformer models (default: 8)')
+    
+    args = parser.parse_args()
+    
+    # Update CONFIG with command line arguments
+    CONFIG['num_epochs'] = args.epochs
+    CONFIG['patience'] = args.patience
+    CONFIG['batch_size_rnn'] = args.batch_size_rnn
+    CONFIG['batch_size_transformer'] = args.batch_size_transformer
+    
+    print("\nConfiguration:")
+    print(f"  Data path: {args.data_path}")
+    print(f"  Models dir: {args.models_dir}")
+    print(f"  Output dir: {args.output_dir}")
+    print(f"  Epochs: {args.epochs}")
+    print(f"  Patience: {args.patience}")
+    print(f"  Batch size (RNN): {args.batch_size_rnn}")
+    print(f"  Batch size (Transformer): {args.batch_size_transformer}")
+    
+    results = run_all_experiments(args)
     print("\n" + "="*60)
     print("All experiments complete!")
     print("="*60)

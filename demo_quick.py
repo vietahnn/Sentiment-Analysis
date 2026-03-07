@@ -10,16 +10,27 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from train_models import *
+import argparse
 import warnings
 warnings.filterwarnings('ignore')
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Quick demo test')
+    parser.add_argument('--data-path', type=str, default='data.xlsx',
+                       help='Path to dataset file (default: data.xlsx)')
+    parser.add_argument('--samples', type=int, default=200,
+                       help='Number of samples to test (default: 200)')
+    args = parser.parse_args()
 
 print("="*60)
 print("QUICK DEMO - Testing Pipeline")
 print("="*60)
+print(f"Data path: {args.data_path}")
+print(f"Test samples: {args.samples}")
 
 # Load small subset
 print("\n1. Loading data subset...")
-df = load_data('data.xlsx')
+df = load_data(args.data_path)
 df_sample = df.sample(n=200, random_state=42)  # Only 200 samples for quick test
 
 # Split

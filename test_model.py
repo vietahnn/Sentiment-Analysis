@@ -12,14 +12,29 @@ from transformers import AutoTokenizer
 from train_models import *
 import json
 import os
+import argparse
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Test trained models')
+    parser.add_argument('--data-path', type=str, default='data.xlsx',
+                       help='Path to dataset file (default: data.xlsx)')
+    parser.add_argument('--models-dir', type=str, default='models',
+                       help='Directory containing model checkpoints (default: models)')
+    parser.add_argument('--model', type=str, default=None,
+                       help='Test specific model (e.g., LSTM, PhoBERT)')
+    parser.add_argument('--strategy', type=str, default='hybrid',
+                       help='Test specific strategy (default: hybrid)')
+    args = parser.parse_args()
 
 print("="*60)
 print("MODEL TESTING SCRIPT")
 print("="*60)
+print(f"Data path: {args.data_path}")
+print(f"Models dir: {args.models_dir}")
 
 # Load data
 print("\nLoading data...")
-df = load_data('data.xlsx')
+df = load_data(args.data_path)
 
 # Split (same as training)
 train_size = int(0.8 * len(df))
@@ -44,9 +59,9 @@ def test_rnn_model(model_name, strategy='hybrid'):
     print(f"{'='*50}")
     
     # Check if model checkpoint exists
-    checkpoint_path = f'models/{model_name}_{strategy}_best.pt'
+    checkpoint_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
     if not os.path.exists(checkpoint_path):
-        print(f"❌ Checkpoint not found: {checkpoint_path}")
+        print(f"❌ Checkpoint not found:{checkpoint_path}")
         return None
     
     # Create datasets
@@ -103,7 +118,7 @@ def test_transformer_model(model_name, strategy='hybrid'):
     print(f"{'='*50}")
     
     # Check if model checkpoint exists
-    checkpoint_path = f'models/{model_name}_{strategy}_best.pt'
+    checkpoint_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
     if not os.path.exists(checkpoint_path):
         print(f"❌ Checkpoint not found: {checkpoint_path}")
         return None
@@ -157,11 +172,12 @@ def test_all_models():
     print("="*60)
     
     # Check which models are available
-    if not os.path.exists('models'):
-        print("❌ No models directory found. Train models first!")
+    if not os.path.exists(args.models_dir):
+        print(f"❌ No models directory found: {args.models_dir}")
+        print("   Train models first with: python run_experiments.py")
         return
     
-    checkpoints = [f for f in os.listdir('models') if f.endswith('.pt')]
+    checkpoints = [f for f in os.listdir(args.models_dir) if f.endswith('.pt')]
     
     if not checkpoints:
         print("❌ No trained models found. Train models first!")
@@ -216,10 +232,15 @@ def test_all_models():
     return results
 
 
-if __name__ == '__main__':
-    # Option 1: Test all available models
-    test_all_models()
-    
-    # Option 2: Test specific model (uncomment to use)
-    # test_rnn_model('LSTM', 'hybrid')
-    # test_transformer_model('PhoBERT', 'hybrid')
+    # Test based on arguments
+    if args.model:
+        print(f"\nTesting specific model: {args.model} ({args.strategy})")
+        if args.model in ['LSTM', 'BiLSTM', 'GRU', 'LSTM+Attention']:
+            test_rnn_model(args.model, args.strategy)
+        elif args.model in ['PhoBERT', 'XLM-RoBERTa']:
+            test_transformer_model(args.model, args.strategy)
+        else:
+            print(f"Unknown model: {args.model}")
+    else:
+        # Test all available models
+        test_all_models()
