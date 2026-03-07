@@ -232,15 +232,15 @@ def test_all_models():
     return results
 
 
-    # Test based on arguments
-    if args.model:
-        print(f"\nTesting specific model: {args.model} ({args.strategy})")
-        if args.model in ['LSTM', 'BiLSTM', 'GRU', 'LSTM+Attention']:
-            test_rnn_model(args.model, args.strategy)
-        elif args.model in ['PhoBERT', 'XLM-RoBERTa']:
-            test_transformer_model(args.model, args.strategy)
-        else:
-            print(f"Unknown model: {args.model}")
+# Test based on arguments
+if args.model:
+    print(f"\nTesting specific model: {args.model} ({args.strategy})")
+    if args.model in ['LSTM', 'BiLSTM', 'GRU', 'LSTM+Attention']:
+        test_rnn_model(args.model, args.strategy)
+    elif args.model in ['PhoBERT', 'XLM-RoBERTa']:
+        test_transformer_model(args.model, args.strategy)
     else:
-        # Test all available models
-        test_all_models()
+        print(f"Unknown model: {args.model}")
+else:
+    # Test all available models
+    test_all_models()

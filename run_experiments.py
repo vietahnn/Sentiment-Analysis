@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 from train_models import *
 import time
 import json
@@ -38,6 +40,54 @@ all_results = {
     'error_examples': [],
     'training_history': {}
 }
+
+
+def resample_text_data(texts, labels, strategy='none'):
+    """Text-safe imbalance handling for sequence models."""
+    X = np.array(texts, dtype=object)
+    y = np.array(labels)
+
+    if strategy in ['none', 'class_weights']:
+        return X, y
+
+    # For text data, use random oversampling instead of synthetic interpolation.
+    if strategy == 'smote':
+        ros = RandomOverSampler(random_state=SEED)
+        X_res, y_res = ros.fit_resample(X.reshape(-1, 1), y)
+        return X_res.flatten(), y_res
+
+    if strategy == 'hybrid':
+        class_counts = pd.Series(y).value_counts().to_dict()
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_counts = [count for cls, count in class_counts.items() if cls != majority_class]
+
+        if minority_counts:
+            # First reduce majority pressure, then rebalance with oversampling.
+            target_majority = max(minority_counts) * 2
+            target_majority = min(target_majority, class_counts[majority_class])
+            rus = RandomUnderSampler(
+                random_state=SEED,
+                sampling_strategy={majority_class: target_majority}
+            )
+            X_under, y_under = rus.fit_resample(X.reshape(-1, 1), y)
+        else:
+            X_under, y_under = X.reshape(-1, 1), y
+
+        balanced_target = int(pd.Series(y_under).value_counts().max())
+        ros_strategy = {
+            cls: balanced_target
+            for cls, count in pd.Series(y_under).value_counts().to_dict().items()
+            if count < balanced_target
+        }
+
+        if ros_strategy:
+            ros = RandomOverSampler(random_state=SEED, sampling_strategy=ros_strategy)
+            X_balanced, y_balanced = ros.fit_resample(X_under, y_under)
+            return X_balanced.flatten(), y_balanced
+
+        return X_under.flatten(), y_under
+
+    return X, y
 
 
 def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strategy='none'):
@@ -75,7 +125,8 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
         criterion = nn.CrossEntropyLoss()
     
     # Training loop
-    best_f1 = 0
+    best_f1 = -1
+    best_metrics = None
     patience_counter = 0
     train_losses, val_losses = [], []
     
@@ -97,7 +148,7 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
               f"Val F1={val_f1:.4f}")
         
         # Early stopping
-        if val_f1 > best_f1:
+        if best_metrics is None or val_f1 > best_f1:
             best_f1 = val_f1
             best_metrics = val_metrics
             patience_counter = 0
@@ -147,7 +198,8 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
         criterion = nn.CrossEntropyLoss()
     
     # Training loop
-    best_f1 = 0
+    best_f1 = -1
+    best_metrics = None
     patience_counter = 0
     train_losses, val_losses = [], []
     
@@ -171,7 +223,7 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
               f"Val F1={val_f1:.4f}")
         
         # Early stopping
-        if val_f1 > best_f1:
+        if best_metrics is None or val_f1 > best_f1:
             best_f1 = val_f1
             best_metrics = val_metrics
             patience_counter = 0
@@ -198,6 +250,16 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
 
 def run_all_experiments(args):
     """Run complete experimental pipeline"""
+
+    global all_results
+    all_results = {
+        'overall_performance': [],
+        'per_class_performance': [],
+        'aspect_performance': [],
+        'multitask_performance': [],
+        'error_examples': [],
+        'training_history': {}
+    }
     
     print("="*60)
     print("Starting Complete Experimental Pipeline")
@@ -231,7 +293,7 @@ def run_all_experiments(args):
     strategies = ['none', 'class_weights', 'smote', 'hybrid']
     
     # Model configurations
-    rnn_models = ['LSTM', 'BiLSTM', 'GRU']  # We'll skip LSTM+Attention for faster training
+    rnn_models = ['LSTM', 'BiLSTM', 'GRU', 'LSTM+Attention']
     transformer_models = ['PhoBERT', 'XLM-RoBERTa']
     
     # ====================
@@ -248,14 +310,9 @@ def run_all_experiments(args):
         print(f"{'*'*50}")
         
         # Apply imbalance handling for data-level strategies
-        if strategy in ['smote', 'hybrid']:
-            indices = np.arange(len(train_df))
-            indices_resampled, y_resampled = get_imbalanced_data(indices, y_train, strategy)
-            X_train_resampled = X_train_text[indices_resampled]
-            y_train_resampled = y_resampled
-        else:
-            X_train_resampled = X_train_text
-            y_train_resampled = y_train
+        X_train_resampled, y_train_resampled = resample_text_data(
+            X_train_text, y_train, strategy
+        )
         
         # Create datasets
         train_dataset = SentimentDataset(X_train_resampled, y_train_resampled, 
@@ -327,14 +384,9 @@ def run_all_experiments(args):
             print(f"{'*'*50}")
             
             # Apply imbalance handling
-            if strategy in ['smote', 'hybrid']:
-                indices = np.arange(len(train_df))
-                indices_resampled, y_resampled = get_imbalanced_data(indices, y_train, strategy)
-                X_train_resampled = X_train_text[indices_resampled]
-                y_train_resampled = y_resampled
-            else:
-                X_train_resampled = X_train_text
-                y_train_resampled = y_train
+            X_train_resampled, y_train_resampled = resample_text_data(
+                X_train_text, y_train, strategy
+            )
             
             # Create datasets
             train_dataset = TransformerDataset(X_train_resampled, y_train_resampled, 

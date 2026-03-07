@@ -1,503 +1,408 @@
 """
-Training Pipeline for Vietnamese Fintech Sentiment Analysis
-Trains LSTM, BiLSTM, GRU, LSTM+Attention, PhoBERT, XLM-RoBERTa
-with various imbalance handling strategies
+Core model components for Vietnamese fintech sentiment experiments.
+Provides data loading, datasets, model definitions, and train/eval utilities.
 """
 
-import pandas as pd
+from __future__ import annotations
+
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModel
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
-    f1_score, accuracy_score, precision_recall_fscore_support,
-    confusion_matrix, balanced_accuracy_score, mean_absolute_error
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    precision_recall_fscore_support,
 )
-from imblearn.over_sampling import SMOTE
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.combine import SMOTETomek
-import matplotlib.pyplot as plt
-import seaborn as sns
-from tqdm import tqdm
-import json
-import warnings
-warnings.filterwarnings('ignore')
+from torch.utils.data import Dataset
+from transformers import AutoModel
 
-# Set random seeds for reproducibility
+
 SEED = 42
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using device: {device}")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# ====================
-# Data Preprocessing
-# ====================
+def _normalize_sentiment_label(value):
+    """Map raw sentiment text into class ids: neg=0, neu=1, pos=2."""
+    if pd.isna(value):
+        return None
 
-def load_data(file_path):
-    """Load and preprocess data from Excel"""
+    text = str(value).strip().lower()
+    if text in {"negative", "neg", "0", "-1"}:
+        return 0
+    if text in {"neutral", "neu", "1"}:
+        return 1
+    if text in {"positive", "pos", "2"}:
+        return 2
+
+    return None
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load dataset and create fields used by training scripts."""
     df = pd.read_excel(file_path)
-    print(f"Loaded {len(df)} reviews")
-    
-    # Map sentiment to numeric labels
-    sentiment_map = {'Positive': 2, 'Negative': 0, 'Neutral': 1}
-    df['sentiment_label'] = df['sentiment'].map(sentiment_map)
-    
-    # Map aspects to multi-hot encoding (8 aspect categories)
-    aspect_categories = ['Transaction', 'UI/UX', 'Security', 'Customer Support', 
-                        'Fee', 'Promotion', 'Savings', 'General']
-    
-    def encode_aspects(aspect_str):
-        if pd.isna(aspect_str):
-            return [0] * 8
-        aspects = str(aspect_str).split('|')
-        encoded = [0] * 8
-        for i, cat in enumerate(aspect_categories):
-            if cat in aspects:
-                encoded[i] = 1
+
+    if "content" not in df.columns:
+        raise ValueError("Dataset must contain 'content' column")
+
+    if "sentiment_label" not in df.columns:
+        if "sentiment" not in df.columns:
+            raise ValueError("Dataset must contain either 'sentiment_label' or 'sentiment'")
+        df["sentiment_label"] = df["sentiment"].apply(_normalize_sentiment_label)
+
+    # Drop rows that cannot be mapped to one of 3 sentiment labels.
+    df = df[df["sentiment_label"].isin([0, 1, 2])].copy()
+    df["sentiment_label"] = df["sentiment_label"].astype(int)
+
+    # Optional columns used by other scripts.
+    if "sentiment" not in df.columns:
+        inv_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
+        df["sentiment"] = df["sentiment_label"].map(inv_map)
+
+    if "score" in df.columns and "rating_label" not in df.columns:
+        df["rating_label"] = pd.to_numeric(df["score"], errors="coerce").fillna(3).astype(int) - 1
+        df["rating_label"] = df["rating_label"].clip(0, 4)
+
+    if "aspect_categories" not in df.columns:
+        df["aspect_categories"] = "General"
+
+    aspect_categories = [
+        "Transaction",
+        "UI/UX",
+        "Security",
+        "Customer Support",
+        "Fee",
+        "Promotion",
+        "Savings",
+        "General",
+    ]
+
+    def encode_aspects(aspect_text):
+        if pd.isna(aspect_text):
+            return [0] * len(aspect_categories)
+
+        raw_parts = [part.strip() for part in str(aspect_text).split("|")]
+        encoded = [1 if category in raw_parts else 0 for category in aspect_categories]
         return encoded
-    
-    df['aspect_encoded'] = df['aspect_categories'].apply(encode_aspects)
-    
-    # Rating as 0-4 (1-5 stars mapped to 0-4)
-    df['rating_label'] = df['score'] - 1
-    
+
+    df["aspect_encoded"] = df["aspect_categories"].apply(encode_aspects)
+
+    df = df.reset_index(drop=True)
     return df
 
 
-def preprocess_text(text):
-    """Basic Vietnamese text preprocessing"""
+def preprocess_text(text) -> str:
+    """Simple normalization suitable for app-review text."""
     if pd.isna(text):
         return ""
-    
-    text = str(text).lower()
-    
-    # Teen code normalization
+
+    text = str(text).strip().lower()
+
     teen_code_map = {
-        ' k ': ' không ',
-        ' ko ': ' không ',
-        ' đc ': ' được ',
-        ' dc ': ' được ',
-        ' cx ': ' cũng ',
-        ' j ': ' gì ',
-        ' tl ': ' trả lời ',
-        ' sv ': ' sử dụng ',
-        ' vs ': ' với ',
-        ' mk ': ' mình ',
-        ' t ': ' tôi ',
-        ' m ': ' mày ',
-        ' đ ': ' đ ',
+        " ko ": " khong ",
+        " k ": " khong ",
+        " dc ": " duoc ",
+        " dk ": " duoc ",
+        " vs ": " voi ",
+        " cx ": " cung ",
+        " nt ": " nhan tin ",
+        " ib ": " nhan tin ",
     }
-    
+
+    text = f" {text} "
     for old, new in teen_code_map.items():
         text = text.replace(old, new)
-    
-    return text.strip()
+
+    return " ".join(text.split())
 
 
 def get_class_weights(labels):
-    """Calculate class weights for imbalanced data"""
-    from sklearn.utils.class_weight import compute_class_weight
-    
-    classes = np.unique(labels)
-    weights = compute_class_weight('balanced', classes=classes, y=labels)
-    return torch.FloatTensor(weights).to(device)
+    """Compute balanced class weights for CrossEntropyLoss."""
+    labels = np.asarray(labels)
+    classes = np.array([0, 1, 2])
 
+    class_counts = np.array([(labels == class_id).sum() for class_id in classes], dtype=np.float32)
+    class_counts = np.where(class_counts == 0, 1.0, class_counts)
 
-# ====================
-# Dataset Classes
-# ====================
+    weights = class_counts.sum() / (len(classes) * class_counts)
+    return torch.tensor(weights, dtype=torch.float32, device=device)
+
 
 class SentimentDataset(Dataset):
-    """Dataset for RNN models (LSTM, BiLSTM, GRU)"""
-    
+    """Dataset for token-index sequence models (LSTM/BiLSTM/GRU)."""
+
     def __init__(self, texts, labels, vocab=None, max_len=128):
-        self.texts = [preprocess_text(t) for t in texts]
-        self.labels = labels
+        self.texts = [preprocess_text(value) for value in texts]
+        self.labels = np.asarray(labels).astype(int)
         self.max_len = max_len
-        
-        # Build vocabulary
-        if vocab is None:
-            self.vocab = self.build_vocab()
-        else:
-            self.vocab = vocab
-    
-    def build_vocab(self):
-        vocab = {'<PAD>': 0, '<UNK>': 1}
-        idx = 2
+        self.vocab = vocab if vocab is not None else self._build_vocab()
+
+    def _build_vocab(self):
+        vocab = {"<PAD>": 0, "<UNK>": 1}
+        next_index = 2
+
         for text in self.texts:
-            for word in text.split():
-                if word not in vocab:
-                    vocab[word] = idx
-                    idx += 1
+            for token in text.split():
+                if token not in vocab:
+                    vocab[token] = next_index
+                    next_index += 1
+
         return vocab
-    
-    def text_to_sequence(self, text):
-        tokens = text.split()[:self.max_len]
-        seq = [self.vocab.get(token, 1) for token in tokens]
-        # Pad sequence
-        if len(seq) < self.max_len:
-            seq += [0] * (self.max_len - len(seq))
-        return seq
-    
+
+    def _to_sequence(self, text):
+        tokens = text.split()[: self.max_len]
+        ids = [self.vocab.get(token, 1) for token in tokens]
+
+        if len(ids) < self.max_len:
+            ids.extend([0] * (self.max_len - len(ids)))
+
+        return ids
+
     def __len__(self):
         return len(self.texts)
-    
+
     def __getitem__(self, idx):
-        seq = self.text_to_sequence(self.texts[idx])
-        return {
-            'input_ids': torch.LongTensor(seq),
-            'labels': torch.LongTensor([self.labels[idx]])
-        }
+        input_ids = torch.tensor(self._to_sequence(self.texts[idx]), dtype=torch.long)
+        label = torch.tensor([int(self.labels[idx])], dtype=torch.long)
+        return {"input_ids": input_ids, "labels": label}
 
 
 class TransformerDataset(Dataset):
-    """Dataset for Transformer models (PhoBERT, XLM-R)"""
-    
-    def __init__(self, texts, labels, tokenizer, max_len=128, 
-                 ratings=None, aspects=None, multi_task=False):
-        self.texts = [preprocess_text(t) for t in texts]
-        self.labels = labels
+    """Dataset for transformer-based classifiers."""
+
+    def __init__(self, texts, labels, tokenizer, max_len=128, ratings=None, aspects=None, multi_task=False):
+        self.texts = [preprocess_text(value) for value in texts]
+        self.labels = np.asarray(labels).astype(int)
         self.tokenizer = tokenizer
         self.max_len = max_len
         self.multi_task = multi_task
         self.ratings = ratings
         self.aspects = aspects
-    
+
     def __len__(self):
         return len(self.texts)
-    
+
     def __getitem__(self, idx):
         encoding = self.tokenizer(
             self.texts[idx],
             max_length=self.max_len,
-            padding='max_length',
+            padding="max_length",
             truncation=True,
-            return_tensors='pt'
+            return_tensors="pt",
         )
-        
+
         item = {
-            'input_ids': encoding['input_ids'].squeeze(0),
-            'attention_mask': encoding['attention_mask'].squeeze(0),
-            'labels': torch.LongTensor([self.labels[idx]])
+            "input_ids": encoding["input_ids"].squeeze(0),
+            "attention_mask": encoding["attention_mask"].squeeze(0),
+            "labels": torch.tensor([int(self.labels[idx])], dtype=torch.long),
         }
-        
+
         if self.multi_task:
-            item['ratings'] = torch.LongTensor([self.ratings[idx]])
-            item['aspects'] = torch.FloatTensor(self.aspects[idx])
-        
+            rating_value = 2 if self.ratings is None else int(self.ratings[idx])
+            aspect_value = [0.0] * 8 if self.aspects is None else self.aspects[idx]
+            item["ratings"] = torch.tensor([rating_value], dtype=torch.long)
+            item["aspects"] = torch.tensor(aspect_value, dtype=torch.float)
+
         return item
 
 
-# ====================
-# Model Architectures
-# ====================
-
 class LSTMClassifier(nn.Module):
-    """LSTM model for sentiment classification"""
-    
-    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, 
-                 num_classes=3, num_layers=2, dropout=0.3):
+    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, num_classes=3, num_layers=2, dropout=0.3):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, 
-                           batch_first=True, dropout=dropout)
+        self.lstm = nn.LSTM(
+            embedding_dim,
+            hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+        )
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
-    
+
     def forward(self, x):
         embedded = self.embedding(x)
-        lstm_out, (hidden, _) = self.lstm(embedded)
-        # Use last hidden state
-        output = self.dropout(hidden[-1])
-        return self.fc(output)
+        _, (hidden, _) = self.lstm(embedded)
+        return self.fc(self.dropout(hidden[-1]))
 
 
 class BiLSTMClassifier(nn.Module):
-    """Bidirectional LSTM model"""
-    
-    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, 
-                 num_classes=3, dropout=0.3):
+    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, num_classes=3, dropout=0.3):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.bilstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, 
-                             bidirectional=True, dropout=dropout)
+        self.bilstm = nn.LSTM(
+            embedding_dim,
+            hidden_dim,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim * 2, num_classes)
-    
+
     def forward(self, x):
         embedded = self.embedding(x)
-        lstm_out, (hidden, _) = self.bilstm(embedded)
-        # Concatenate forward and backward hidden states
-        hidden = torch.cat((hidden[-2], hidden[-1]), dim=1)
-        output = self.dropout(hidden)
-        return self.fc(output)
+        _, (hidden, _) = self.bilstm(embedded)
+        hidden_state = torch.cat((hidden[-2], hidden[-1]), dim=1)
+        return self.fc(self.dropout(hidden_state))
 
 
 class GRUClassifier(nn.Module):
-    """GRU model for sentiment classification"""
-    
-    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, 
-                 num_classes=3, num_layers=2, dropout=0.3):
+    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, num_classes=3, num_layers=2, dropout=0.3):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.gru = nn.GRU(embedding_dim, hidden_dim, num_layers, 
-                         batch_first=True, dropout=dropout)
+        self.gru = nn.GRU(
+            embedding_dim,
+            hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+        )
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
-    
+
     def forward(self, x):
         embedded = self.embedding(x)
-        gru_out, hidden = self.gru(embedded)
-        output = self.dropout(hidden[-1])
-        return self.fc(output)
+        _, hidden = self.gru(embedded)
+        return self.fc(self.dropout(hidden[-1]))
 
 
 class LSTMAttentionClassifier(nn.Module):
-    """BiLSTM with self-attention mechanism"""
-    
-    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, 
-                 num_classes=3, dropout=0.3):
+    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, num_classes=3, dropout=0.3):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.bilstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, 
-                             bidirectional=True)
+        self.bilstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
         self.attention = nn.Linear(hidden_dim * 2, 1)
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim * 2, num_classes)
-    
+
     def forward(self, x):
         embedded = self.embedding(x)
         lstm_out, _ = self.bilstm(embedded)
-        
-        # Attention mechanism
-        attention_weights = torch.softmax(self.attention(lstm_out), dim=1)
-        context = torch.sum(attention_weights * lstm_out, dim=1)
-        
-        output = self.dropout(context)
-        return self.fc(output)
+        attn_weights = torch.softmax(self.attention(lstm_out), dim=1)
+        context = torch.sum(attn_weights * lstm_out, dim=1)
+        return self.fc(self.dropout(context))
 
 
 class PhoBERTClassifier(nn.Module):
-    """PhoBERT for sentiment classification"""
-    
-    def __init__(self, model_name='vinai/phobert-base', num_classes=3, dropout=0.1):
+    def __init__(self, model_name="vinai/phobert-base", num_classes=3, dropout=0.1):
         super().__init__()
         self.bert = AutoModel.from_pretrained(model_name)
+        hidden_size = self.bert.config.hidden_size
         self.dropout = nn.Dropout(dropout)
-        self.classifier = nn.Linear(768, num_classes)
-    
+        self.classifier = nn.Linear(hidden_size, num_classes)
+
     def forward(self, input_ids, attention_mask):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         pooled = outputs.pooler_output
-        pooled = self.dropout(pooled)
-        return self.classifier(pooled)
+        if pooled is None:
+            pooled = outputs.last_hidden_state[:, 0, :]
+        return self.classifier(self.dropout(pooled))
 
 
 class XLMRClassifier(nn.Module):
-    """XLM-RoBERTa for sentiment classification"""
-    
-    def __init__(self, model_name='xlm-roberta-base', num_classes=3, dropout=0.1):
+    def __init__(self, model_name="xlm-roberta-base", num_classes=3, dropout=0.1):
         super().__init__()
         self.roberta = AutoModel.from_pretrained(model_name)
+        hidden_size = self.roberta.config.hidden_size
         self.dropout = nn.Dropout(dropout)
-        self.classifier = nn.Linear(768, num_classes)
-    
+        self.classifier = nn.Linear(hidden_size, num_classes)
+
     def forward(self, input_ids, attention_mask):
         outputs = self.roberta(input_ids=input_ids, attention_mask=attention_mask)
         pooled = outputs.pooler_output
-        pooled = self.dropout(pooled)
-        return self.classifier(pooled)
+        if pooled is None:
+            pooled = outputs.last_hidden_state[:, 0, :]
+        return self.classifier(self.dropout(pooled))
 
 
-class MultiTaskTransformer(nn.Module):
-    """Multi-task learning: Sentiment + Rating + Aspect"""
-    
-    def __init__(self, model_name='vinai/phobert-base', dropout=0.1):
-        super().__init__()
-        self.bert = AutoModel.from_pretrained(model_name)
-        self.dropout = nn.Dropout(dropout)
-        
-        # Task-specific heads
-        self.sentiment_head = nn.Linear(768, 3)  # 3 sentiment classes
-        self.rating_head = nn.Linear(768, 5)     # 5 rating classes (1-5 stars)
-        self.aspect_head = nn.Linear(768, 8)     # 8 aspect categories
-    
-    def forward(self, input_ids, attention_mask):
-        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        pooled = self.dropout(outputs.pooler_output)
-        
-        sentiment_logits = self.sentiment_head(pooled)
-        rating_logits = self.rating_head(pooled)
-        aspect_logits = self.aspect_head(pooled)
-        
-        return sentiment_logits, rating_logits, aspect_logits
-
-
-# ====================
-# Training Functions
-# ====================
-
-def train_epoch(model, dataloader, optimizer, criterion, device, model_type='rnn'):
-    """Train for one epoch"""
+def train_epoch(model, dataloader, optimizer, criterion, target_device, model_type="rnn"):
+    """One training epoch for either RNN or transformer model."""
     model.train()
-    total_loss = 0
-    predictions, true_labels = [], []
-    
-    for batch in tqdm(dataloader, desc='Training'):
+    total_loss = 0.0
+    all_preds = []
+    all_labels = []
+
+    for batch in dataloader:
         optimizer.zero_grad()
-        
-        if model_type == 'rnn':
-            inputs = batch['input_ids'].to(device)
-            labels = batch['labels'].squeeze(1).to(device)  # squeeze only dim 1
-            outputs = model(inputs)
-        else:  # transformer
-            inputs = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].squeeze(1).to(device)  # squeeze only dim 1
-            outputs = model(inputs, attention_mask)
-        
-        loss = criterion(outputs, labels)
+
+        labels = batch["labels"].squeeze(1).to(target_device)
+
+        if model_type == "rnn":
+            logits = model(batch["input_ids"].to(target_device))
+        else:
+            logits = model(
+                batch["input_ids"].to(target_device),
+                batch["attention_mask"].to(target_device),
+            )
+
+        loss = criterion(logits, labels)
         loss.backward()
-        
-        # Gradient clipping
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        
         optimizer.step()
-        
-        total_loss += loss.item()
-        preds = torch.argmax(outputs, dim=1)
-        predictions.extend(preds.cpu().numpy())
-        true_labels.extend(labels.cpu().numpy())
-    
-    avg_loss = total_loss / len(dataloader)
-    f1 = f1_score(true_labels, predictions, average='macro')
-    
-    return avg_loss, f1
+
+        total_loss += float(loss.item())
+
+        preds = torch.argmax(logits, dim=1)
+        all_preds.extend(preds.detach().cpu().numpy().tolist())
+        all_labels.extend(labels.detach().cpu().numpy().tolist())
+
+    avg_loss = total_loss / max(len(dataloader), 1)
+    macro_f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+    return avg_loss, macro_f1
 
 
-def evaluate(model, dataloader, criterion, device, model_type='rnn'):
-    """Evaluate model"""
+def evaluate(model, dataloader, criterion, target_device, model_type="rnn"):
+    """Evaluate model and return summary metrics used by report tables."""
     model.eval()
-    total_loss = 0
-    predictions, true_labels = [], []
-    
+    total_loss = 0.0
+    all_preds = []
+    all_labels = []
+
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc='Evaluating'):
-            if model_type == 'rnn':
-                inputs = batch['input_ids'].to(device)
-                labels = batch['labels'].squeeze(1).to(device)  # squeeze only dim 1
-                outputs = model(inputs)
-            else:  # transformer
-                inputs = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['labels'].squeeze(1).to(device)  # squeeze only dim 1
-                outputs = model(inputs, attention_mask)
-            
-            loss = criterion(outputs, labels)
-            total_loss += loss.item()
-            
-            preds = torch.argmax(outputs, dim=1)
-            predictions.extend(preds.cpu().numpy())
-            true_labels.extend(labels.cpu().numpy())
-    
-    avg_loss = total_loss / len(dataloader)
-    
-    # Calculate metrics
-    metrics = {
-        'loss': avg_loss,
-        'macro_f1': f1_score(true_labels, predictions, average='macro'),
-        'weighted_f1': f1_score(true_labels, predictions, average='weighted'),
-        'accuracy': accuracy_score(true_labels, predictions),
-        'balanced_accuracy': balanced_accuracy_score(true_labels, predictions)
-    }
-    
-    # Per-class metrics
-    precision, recall, f1, _ = precision_recall_fscore_support(
-        true_labels, predictions, average=None, labels=[0, 1, 2]
+        for batch in dataloader:
+            labels = batch["labels"].squeeze(1).to(target_device)
+
+            if model_type == "rnn":
+                logits = model(batch["input_ids"].to(target_device))
+            else:
+                logits = model(
+                    batch["input_ids"].to(target_device),
+                    batch["attention_mask"].to(target_device),
+                )
+
+            loss = criterion(logits, labels)
+            total_loss += float(loss.item())
+
+            preds = torch.argmax(logits, dim=1)
+            all_preds.extend(preds.detach().cpu().numpy().tolist())
+            all_labels.extend(labels.detach().cpu().numpy().tolist())
+
+    avg_loss = total_loss / max(len(dataloader), 1)
+
+    precision, recall, f1_scores, _ = precision_recall_fscore_support(
+        all_labels,
+        all_preds,
+        labels=[0, 1, 2],
+        average=None,
+        zero_division=0,
     )
-    
-    metrics['per_class'] = {
-        'precision': precision.tolist(),
-        'recall': recall.tolist(),
-        'f1': f1.tolist()
+
+    return {
+        "loss": avg_loss,
+        "macro_f1": f1_score(all_labels, all_preds, average="macro", zero_division=0),
+        "weighted_f1": f1_score(all_labels, all_preds, average="weighted", zero_division=0),
+        "accuracy": accuracy_score(all_labels, all_preds),
+        "balanced_accuracy": balanced_accuracy_score(all_labels, all_preds),
+        "per_class": {
+            "precision": precision.tolist(),
+            "recall": recall.tolist(),
+            "f1": f1_scores.tolist(),
+        },
+        "predictions": all_preds,
+        "true_labels": all_labels,
     }
-    
-    metrics['predictions'] = predictions
-    metrics['true_labels'] = true_labels
-    
-    return metrics
-
-
-def get_imbalanced_data(X, y, strategy='none'):
-    """Apply imbalance handling strategy"""
-    if strategy == 'none':
-        return X, y
-    
-    elif strategy == 'smote':
-        smote = SMOTE(random_state=SEED, k_neighbors=3)
-        X_res, y_res = smote.fit_resample(X.reshape(-1, 1), y)
-        return X_res.flatten(), y_res
-    
-    elif strategy == 'undersample':
-        rus = RandomUnderSampler(random_state=SEED, sampling_strategy={0: 2000})
-        X_res, y_res = rus.fit_resample(X.reshape(-1, 1), y)
-        return X_res.flatten(), y_res
-    
-    elif strategy == 'hybrid':
-        # First undersample majority, then SMOTE minority
-        rus = RandomUnderSampler(random_state=SEED, sampling_strategy={0: 2500})
-        X_res, y_res = rus.fit_resample(X.reshape(-1, 1), y)
-        smote = SMOTE(random_state=SEED, k_neighbors=3)
-        X_res, y_res = smote.fit_resample(X_res, y_res)
-        return X_res.flatten(), y_res
-    
-    return X, y
-
-
-# ====================
-# Main Training Script
-# ====================
-
-def main():
-    # Load data
-    print("Loading data...")
-    df = load_data('data.xlsx')
-    
-    # Split data chronologically (80/20)
-    train_size = int(0.8 * len(df))
-    train_df = df.iloc[:train_size]
-    test_df = df.iloc[train_size:]
-    
-    print(f"Train: {len(train_df)}, Test: {len(test_df)}")
-    
-    # Save results
-    results = {}
-    
-    # Imbalance strategies
-    strategies = ['none', 'class_weights', 'smote', 'hybrid']
-    
-    # Train models
-    for strategy in strategies:
-        print(f"\n{'='*50}")
-        print(f"Strategy: {strategy}")
-        print(f"{'='*50}")
-        
-        # TODO: Implement training for each model type
-        # This is a template - you'll need to implement full training loops
-        
-        pass
-    
-    # Save results
-    with open('results.json', 'w') as f:
-        json.dump(results, f, indent=2)
-    
-    print("\nTraining complete! Results saved to results.json")
-
-
-if __name__ == '__main__':
-    main()
