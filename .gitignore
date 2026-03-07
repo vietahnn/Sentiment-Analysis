@@ -1,0 +1,107 @@
+# ==========================================
+# DATASET & DATA FILES
+# ==========================================
+# Dataset sẽ được upload riêng trên Kaggle
+data.xlsx
+~$data.xlsx
+*.xlsx
+*.csv
+
+# ==========================================
+# MODEL CHECKPOINTS & OUTPUTS
+# ==========================================
+# Checkpoints sẽ được tạo khi train
+models/
+*.pt
+*.pth
+*.h5
+*.ckpt
+
+# Training results
+results_*.csv
+training_history.json
+latex_tables.txt
+
+# ==========================================
+# FIGURES & VISUALIZATIONS
+# ==========================================
+# Figures sẽ được generate sau khi train
+figures/
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+
+# ==========================================
+# ANALYSIS & CHECK FILES
+# ==========================================
+# Các file check thông tin không cần thiết cho training
+check_dataset.py
+verify_split.py
+analyze_data.py
+
+# ==========================================
+# PAPER & DOCUMENTATION (không liên quan đến code)
+# ==========================================
+main.tex
+paper.tex
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
+
+# ==========================================
+# PYTHON CACHE & TEMP FILES
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ==========================================
+# JUPYTER NOTEBOOKS (nếu có)
+# ==========================================
+.ipynb_checkpoints/
+*.ipynb
+
+# ==========================================
+# IDE & EDITOR FILES
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==========================================
+# VIRTUAL ENVIRONMENT
+# ==========================================
+venv/
+env/
+ENV/
+.venv/
+
+# ==========================================
+# LOGS & TEMPORARY FILES
+# ==========================================
+*.log
+logs/
+temp/
+tmp/
+
+# ==========================================
+# OS FILES
+# ==========================================
+Thumbs.db
+.DS_Store
+desktop.ini

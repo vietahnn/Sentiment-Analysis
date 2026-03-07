@@ -1,0 +1,87 @@
+# ========================================
+# PUSH CODE LÊN GITHUB - HƯỚNG DẪN
+# ========================================
+
+# 1. Khởi tạo Git repository (nếu chưa có)
+git init
+
+# 2. Add remote repository (thay YOUR_USERNAME và YOUR_REPO)
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+
+# 3. Check files sẽ được commit (xác nhận .gitignore hoạt động)
+git status
+
+# Kết quả mong đợi - CHỈ các files sau được tracked:
+#   .gitignore
+#   README_KAGGLE.md
+#   requirements.txt
+#   train_models.py
+#   run_experiments.py
+#   generate_figures.py
+#   export_latex_tables.py
+#   demo_quick.py (optional)
+#   test_model.py (optional)
+#   README.md
+
+# 4. Add tất cả files cần thiết
+git add .gitignore
+git add README_KAGGLE.md
+git add requirements.txt
+git add train_models.py
+git add run_experiments.py
+git add generate_figures.py
+git add export_latex_tables.py
+git add demo_quick.py
+git add test_model.py
+git add README.md
+
+# 5. Commit
+git commit -m "Initial commit: Training code for Vietnamese sentiment analysis"
+
+# 6. Push lên GitHub
+git branch -M main
+git push -u origin main
+
+# ========================================
+# VERIFY - Kiểm tra files ĐÃ ĐƯỢC push
+# ========================================
+# Vào GitHub repository, kiểm tra chỉ có:
+# ✓ train_models.py
+# ✓ run_experiments.py
+# ✓ generate_figures.py
+# ✓ export_latex_tables.py
+# ✓ requirements.txt
+# ✓ README.md / README_KAGGLE.md
+# ✓ .gitignore
+
+# ========================================
+# VERIFY - Kiểm tra files KHÔNG được push
+# ========================================
+# Các files sau KHÔNG nên xuất hiện trên GitHub:
+# ✗ data.xlsx (dataset)
+# ✗ models/ (checkpoints)
+# ✗ *.csv (kết quả)
+# ✗ *.png (figures)
+# ✗ check_dataset.py
+# ✗ verify_split.py
+# ✗ paper.tex
+# ✗ main.tex
+
+# ========================================
+# CLONE VỀ LOCAL (để test trên máy khác)
+# ========================================
+# git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+# cd YOUR_REPO
+# pip install -r requirements.txt
+# # Copy data.xlsx vào folder
+# python demo_quick.py  # Test
+# python run_experiments.py  # Train
+
+# ========================================
+# UPLOAD DATASET RIÊNG TRÊN KAGGLE
+# ========================================
+# 1. Vào Kaggle → Datasets → New Dataset
+# 2. Upload file: data.xlsx
+# 3. Title: "Momo Fintech Reviews - Vietnamese Sentiment"
+# 4. Public/Private tùy chọn
+# 5. Trong Kaggle Notebook, Add Data → Chọn dataset vừa upload
