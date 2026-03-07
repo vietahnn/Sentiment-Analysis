@@ -19,6 +19,18 @@ import gc
 import argparse
 from collections import defaultdict
 
+
+ASPECT_CATEGORIES = [
+    'Transaction',
+    'UI/UX',
+    'Security',
+    'Customer Support',
+    'Fee',
+    'Promotion',
+    'Savings',
+    'General',
+]
+
 # Configuration
 CONFIG = {
     'batch_size_rnn': 16,
@@ -45,6 +57,63 @@ all_results = {
     'error_examples': [],
     'training_history': {}
 }
+
+
+def _extract_aspect_set(aspect_value):
+    """Normalize raw aspect annotations into a set of aspect names."""
+    if pd.isna(aspect_value):
+        return {'General'}
+
+    raw = str(aspect_value).strip()
+    if not raw:
+        return {'General'}
+
+    parts = [part.strip() for part in raw.split('|') if part.strip()]
+    if not parts:
+        return {'General'}
+
+    return set(parts)
+
+
+def compute_aspect_table(best_predictions, test_df, output_models):
+    """Compute per-aspect sentiment Macro-F1 for best strategy of each model."""
+    rows = []
+    aspect_sets = test_df['aspect_categories'].apply(_extract_aspect_set).tolist()
+
+    for aspect in ASPECT_CATEGORIES:
+        row = {'Aspect': aspect}
+        aspect_indices = [idx for idx, values in enumerate(aspect_sets) if aspect in values]
+
+        for model_name in output_models:
+            model_payload = best_predictions.get(model_name)
+            if not model_payload:
+                row[model_name] = np.nan
+                continue
+
+            y_true = np.asarray(model_payload['true_labels'])
+            y_pred = np.asarray(model_payload['predictions'])
+            if len(aspect_indices) == 0:
+                row[model_name] = np.nan
+                continue
+
+            y_true_aspect = y_true[aspect_indices]
+            y_pred_aspect = y_pred[aspect_indices]
+            row[model_name] = f1_score(
+                y_true_aspect,
+                y_pred_aspect,
+                average='macro',
+                zero_division=0,
+            )
+
+        rows.append(row)
+
+    average_row = {'Aspect': 'Average'}
+    for model_name in output_models:
+        values = [row[model_name] for row in rows if not pd.isna(row[model_name])]
+        average_row[model_name] = float(np.mean(values)) if values else np.nan
+
+    rows.append(average_row)
+    return pd.DataFrame(rows)
 
 
 def resample_text_data(texts, labels, strategy='none'):
@@ -128,10 +197,12 @@ def save_intermediate_results(output_dir):
     """Persist partial results after each model to avoid losing long runs."""
     table2_path = os.path.join(output_dir, 'results_table2_overall.csv')
     table3_path = os.path.join(output_dir, 'results_table3_perclass.csv')
+    table5_path = os.path.join(output_dir, 'results_table5_aspect.csv')
     history_path = os.path.join(output_dir, 'training_history.json')
 
     pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
     pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
+    pd.DataFrame(all_results['aspect_performance']).to_csv(table5_path, index=False)
     with open(history_path, 'w') as f:
         json.dump(all_results['training_history'], f, indent=2)
 
@@ -365,6 +436,7 @@ def run_all_experiments(args):
         'error_examples': [],
         'training_history': {}
     }
+    prediction_store = {}
     
     print("="*60)
     print("Starting Complete Experimental Pipeline")
@@ -442,6 +514,10 @@ def run_all_experiments(args):
         for model_name in rnn_models:
             metrics = train_rnn_model(model_name, train_dataset, val_dataset, test_dataset,
                                      vocab_size, strategy)
+            prediction_store[(model_name, strategy)] = {
+                'predictions': metrics['predictions'],
+                'true_labels': metrics['true_labels'],
+            }
             
             # Store results for Table 2 (Overall performance)
             all_results['overall_performance'].append({
@@ -516,6 +592,10 @@ def run_all_experiments(args):
             # Train
             metrics = train_transformer_model(model_name, train_dataset, val_dataset,
                                              test_dataset, strategy)
+            prediction_store[(model_name, strategy)] = {
+                'predictions': metrics['predictions'],
+                'true_labels': metrics['true_labels'],
+            }
             
             # Store results
             all_results['overall_performance'].append({
@@ -553,6 +633,34 @@ def run_all_experiments(args):
 
             save_intermediate_results(args.output_dir)
             cleanup_memory()
+
+    # ====================
+    # Aspect-level results (Table 5)
+    # ====================
+    print("\n" + "="*60)
+    print("Computing Aspect-Level Results")
+    print("="*60)
+
+    preferred_models = ['LSTM', 'BiLSTM', 'PhoBERT', 'XLM-RoBERTa']
+    best_predictions = {}
+
+    for model_name in preferred_models:
+        model_rows = [
+            row for row in all_results['overall_performance']
+            if row['Model'] == model_name
+        ]
+        if not model_rows:
+            continue
+
+        best_row = max(model_rows, key=lambda x: x['Macro-F1'])
+        best_strategy = best_row['Strategy']
+        payload = prediction_store.get((model_name, best_strategy))
+        if payload:
+            best_predictions[model_name] = payload
+            print(f"{model_name}: using strategy '{best_strategy}' for aspect table")
+
+    aspect_df = compute_aspect_table(best_predictions, test_df, preferred_models)
+    all_results['aspect_performance'] = aspect_df.to_dict(orient='records')
     
     # Save all results
     print("\n" + "="*60)
@@ -562,10 +670,12 @@ def run_all_experiments(args):
     # Convert to DataFrames and save
     table2_path = os.path.join(args.output_dir, 'results_table2_overall.csv')
     table3_path = os.path.join(args.output_dir, 'results_table3_perclass.csv')
+    table5_path = os.path.join(args.output_dir, 'results_table5_aspect.csv')
     history_path = os.path.join(args.output_dir, 'training_history.json')
     
     pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
     pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
+    pd.DataFrame(all_results['aspect_performance']).to_csv(table5_path, index=False)
     
     # Save training history
     with open(history_path, 'w') as f:
@@ -574,6 +684,7 @@ def run_all_experiments(args):
     print("\n✓ Results saved to:")
     print(f"  - {table2_path}")
     print(f"  - {table3_path}")
+    print(f"  - {table5_path}")
     print(f"  - {history_path}")
     
     return all_results
