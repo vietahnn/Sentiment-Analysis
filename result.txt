@@ -1,0 +1,364 @@
+Configuration:
+  Data path: /kaggle/input/datasets/nguyenthanhvung/sentiment-analysis/data.xlsx
+  Models dir: /kaggle/working/Sentiment-Analysis/models
+  Output dir: /kaggle/working/Sentiment-Analysis
+  Epochs: 50
+  Patience: 5
+  Batch size (RNN): 16
+  Batch size (Transformer): 8
+============================================================
+Starting Complete Experimental Pipeline
+============================================================
+
+1. Loading data...
+Data path: /kaggle/input/datasets/nguyenthanhvung/sentiment-analysis/data.xlsx
+Train: 3460, Test: 865
+Train sentiment distribution:
+sentiment
+Negative    2852
+Positive     425
+Neutral      183
+Name: count, dtype: int64
+
+============================================================
+Training RNN Models
+============================================================
+
+**************************************************
+Strategy: none
+**************************************************
+Vocabulary size: 5594
+
+Training LSTM with none strategy...
+Epoch 1/50: Train Loss=0.5958, Val Loss=0.7045, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 2/50: Train Loss=0.5762, Val Loss=0.7508, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 3/50: Train Loss=0.5777, Val Loss=0.6983, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 4/50: Train Loss=0.5789, Val Loss=0.7136, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=0.5754, Val Loss=0.7196, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 6/50: Train Loss=0.5808, Val Loss=0.6972, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Early stopping at epoch 6
+
+Training BiLSTM with none strategy...
+/usr/local/lib/python3.12/dist-packages/torch/nn/modules/rnn.py:123: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.3 and num_layers=1
+  warnings.warn(
+Epoch 1/50: Train Loss=0.5333, Val Loss=0.5587, Macro-F1=0.4526, Weighted-F1=0.7660, Bal-Acc=0.4389, Acc=0.8127
+Epoch 2/50: Train Loss=0.3655, Val Loss=0.5557, Macro-F1=0.4729, Weighted-F1=0.7738, Bal-Acc=0.4699, Acc=0.8069
+Epoch 3/50: Train Loss=0.2685, Val Loss=0.6730, Macro-F1=0.4737, Weighted-F1=0.7533, Bal-Acc=0.4888, Acc=0.7665
+Epoch 4/50: Train Loss=0.1913, Val Loss=0.7782, Macro-F1=0.4814, Weighted-F1=0.7753, Bal-Acc=0.4673, Acc=0.8058
+Epoch 5/50: Train Loss=0.1156, Val Loss=1.0630, Macro-F1=0.4886, Weighted-F1=0.7784, Bal-Acc=0.4661, Acc=0.8116
+Epoch 6/50: Train Loss=0.0678, Val Loss=1.1406, Macro-F1=0.4989, Weighted-F1=0.7756, Bal-Acc=0.4796, Acc=0.8012
+Epoch 7/50: Train Loss=0.0354, Val Loss=1.2259, Macro-F1=0.4891, Weighted-F1=0.7594, Bal-Acc=0.4795, Acc=0.7711
+Epoch 8/50: Train Loss=0.0191, Val Loss=1.3428, Macro-F1=0.4797, Weighted-F1=0.7575, Bal-Acc=0.4638, Acc=0.7734
+Epoch 9/50: Train Loss=0.0083, Val Loss=1.5400, Macro-F1=0.4783, Weighted-F1=0.7650, Bal-Acc=0.4616, Acc=0.7896
+Epoch 10/50: Train Loss=0.0033, Val Loss=1.5688, Macro-F1=0.4830, Weighted-F1=0.7629, Bal-Acc=0.4659, Acc=0.7850
+Epoch 11/50: Train Loss=0.0016, Val Loss=1.6581, Macro-F1=0.4870, Weighted-F1=0.7655, Bal-Acc=0.4697, Acc=0.7861
+Early stopping at epoch 11
+
+Training GRU with none strategy...
+Epoch 1/50: Train Loss=0.5913, Val Loss=0.7956, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 2/50: Train Loss=0.5868, Val Loss=0.6962, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 3/50: Train Loss=0.5789, Val Loss=0.6989, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 4/50: Train Loss=0.5007, Val Loss=0.5432, Macro-F1=0.4457, Weighted-F1=0.7582, Bal-Acc=0.4361, Acc=0.8023
+Epoch 5/50: Train Loss=0.3619, Val Loss=0.5353, Macro-F1=0.4950, Weighted-F1=0.7918, Bal-Acc=0.4977, Acc=0.8208
+Epoch 6/50: Train Loss=0.2671, Val Loss=0.6274, Macro-F1=0.5164, Weighted-F1=0.7926, Bal-Acc=0.5142, Acc=0.8104
+Epoch 7/50: Train Loss=0.1906, Val Loss=0.6483, Macro-F1=0.5317, Weighted-F1=0.7943, Bal-Acc=0.5168, Acc=0.8046
+Epoch 8/50: Train Loss=0.1397, Val Loss=0.8202, Macro-F1=0.5405, Weighted-F1=0.7929, Bal-Acc=0.5412, Acc=0.7954
+Epoch 9/50: Train Loss=0.0986, Val Loss=0.7938, Macro-F1=0.5570, Weighted-F1=0.7790, Bal-Acc=0.5687, Acc=0.7676
+Epoch 10/50: Train Loss=0.0794, Val Loss=0.8347, Macro-F1=0.5589, Weighted-F1=0.7891, Bal-Acc=0.5568, Acc=0.7884
+Epoch 11/50: Train Loss=0.0640, Val Loss=0.8992, Macro-F1=0.5282, Weighted-F1=0.7789, Bal-Acc=0.5266, Acc=0.7769
+Epoch 12/50: Train Loss=0.0423, Val Loss=0.9743, Macro-F1=0.5380, Weighted-F1=0.7805, Bal-Acc=0.5376, Acc=0.7792
+Epoch 13/50: Train Loss=0.0259, Val Loss=1.2078, Macro-F1=0.5412, Weighted-F1=0.7818, Bal-Acc=0.5479, Acc=0.7757
+Epoch 14/50: Train Loss=0.0328, Val Loss=1.0701, Macro-F1=0.5218, Weighted-F1=0.7815, Bal-Acc=0.5071, Acc=0.7873
+Epoch 15/50: Train Loss=0.0230, Val Loss=1.1556, Macro-F1=0.5220, Weighted-F1=0.7771, Bal-Acc=0.5152, Acc=0.7769
+Early stopping at epoch 15
+
+Training LSTM+Attention with none strategy...
+Epoch 1/50: Train Loss=0.5472, Val Loss=0.5642, Macro-F1=0.4349, Weighted-F1=0.7483, Bal-Acc=0.4289, Acc=0.7896
+Epoch 2/50: Train Loss=0.3746, Val Loss=0.5257, Macro-F1=0.4834, Weighted-F1=0.7784, Bal-Acc=0.4658, Acc=0.8139
+Epoch 3/50: Train Loss=0.2508, Val Loss=0.5738, Macro-F1=0.5297, Weighted-F1=0.7985, Bal-Acc=0.5076, Acc=0.8231
+Epoch 4/50: Train Loss=0.1454, Val Loss=0.6425, Macro-F1=0.5222, Weighted-F1=0.7913, Bal-Acc=0.5140, Acc=0.8069
+Epoch 5/50: Train Loss=0.0675, Val Loss=0.8365, Macro-F1=0.5328, Weighted-F1=0.7921, Bal-Acc=0.5142, Acc=0.8092
+Epoch 6/50: Train Loss=0.0273, Val Loss=0.9262, Macro-F1=0.5331, Weighted-F1=0.7817, Bal-Acc=0.5299, Acc=0.7827
+Epoch 7/50: Train Loss=0.0090, Val Loss=1.0108, Macro-F1=0.5437, Weighted-F1=0.7913, Bal-Acc=0.5311, Acc=0.8000
+Epoch 8/50: Train Loss=0.0061, Val Loss=1.1910, Macro-F1=0.5236, Weighted-F1=0.7882, Bal-Acc=0.5092, Acc=0.8046
+Epoch 9/50: Train Loss=0.0058, Val Loss=1.1776, Macro-F1=0.5158, Weighted-F1=0.7881, Bal-Acc=0.5022, Acc=0.8069
+Epoch 10/50: Train Loss=0.0030, Val Loss=1.2265, Macro-F1=0.5349, Weighted-F1=0.7845, Bal-Acc=0.5268, Acc=0.7931
+Epoch 11/50: Train Loss=0.0018, Val Loss=1.3157, Macro-F1=0.5151, Weighted-F1=0.7826, Bal-Acc=0.5054, Acc=0.7988
+Epoch 12/50: Train Loss=0.0004, Val Loss=1.3590, Macro-F1=0.5221, Weighted-F1=0.7824, Bal-Acc=0.5095, Acc=0.7977
+Early stopping at epoch 12
+
+**************************************************
+Strategy: class_weights
+**************************************************
+Vocabulary size: 5594
+
+Training LSTM with class_weights strategy...
+Epoch 1/50: Train Loss=1.0930, Val Loss=1.0934, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 2/50: Train Loss=1.0888, Val Loss=1.0955, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 3/50: Train Loss=1.0908, Val Loss=1.0942, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 4/50: Train Loss=1.0876, Val Loss=1.0942, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.1088, Val Loss=1.0968, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 6/50: Train Loss=1.0868, Val Loss=1.0969, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Early stopping at epoch 6
+
+Training BiLSTM with class_weights strategy...
+/usr/local/lib/python3.12/dist-packages/torch/nn/modules/rnn.py:123: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.3 and num_layers=1
+  warnings.warn(
+Epoch 1/50: Train Loss=0.9954, Val Loss=0.9790, Macro-F1=0.4724, Weighted-F1=0.7301, Bal-Acc=0.4934, Acc=0.7145
+Epoch 2/50: Train Loss=0.7406, Val Loss=1.0433, Macro-F1=0.5129, Weighted-F1=0.7526, Bal-Acc=0.5399, Acc=0.7364
+Epoch 3/50: Train Loss=0.5156, Val Loss=1.1917, Macro-F1=0.5203, Weighted-F1=0.7756, Bal-Acc=0.5122, Acc=0.7757
+Epoch 4/50: Train Loss=0.3354, Val Loss=1.4211, Macro-F1=0.5329, Weighted-F1=0.7759, Bal-Acc=0.5236, Acc=0.7757
+Epoch 5/50: Train Loss=0.2475, Val Loss=1.5801, Macro-F1=0.4942, Weighted-F1=0.7486, Bal-Acc=0.5024, Acc=0.7399
+Epoch 6/50: Train Loss=0.1272, Val Loss=2.0783, Macro-F1=0.4990, Weighted-F1=0.7718, Bal-Acc=0.4985, Acc=0.7792
+Epoch 7/50: Train Loss=0.0665, Val Loss=2.5106, Macro-F1=0.4933, Weighted-F1=0.7696, Bal-Acc=0.4736, Acc=0.7873
+Epoch 8/50: Train Loss=0.0285, Val Loss=2.9276, Macro-F1=0.5012, Weighted-F1=0.7748, Bal-Acc=0.4907, Acc=0.7919
+Epoch 9/50: Train Loss=0.0410, Val Loss=2.7826, Macro-F1=0.5097, Weighted-F1=0.7785, Bal-Acc=0.4929, Acc=0.7942
+Early stopping at epoch 9
+
+Training GRU with class_weights strategy...
+Epoch 1/50: Train Loss=1.0968, Val Loss=1.0936, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 2/50: Train Loss=1.0897, Val Loss=1.0951, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 3/50: Train Loss=1.0843, Val Loss=1.0943, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 4/50: Train Loss=1.1114, Val Loss=1.0864, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.0221, Val Loss=0.9151, Macro-F1=0.4693, Weighted-F1=0.7536, Bal-Acc=0.5085, Acc=0.7607
+Epoch 6/50: Train Loss=0.7817, Val Loss=0.8765, Macro-F1=0.5222, Weighted-F1=0.7408, Bal-Acc=0.5759, Acc=0.6913
+Epoch 7/50: Train Loss=0.5794, Val Loss=1.1892, Macro-F1=0.5291, Weighted-F1=0.7688, Bal-Acc=0.5402, Acc=0.7445
+Epoch 8/50: Train Loss=0.4442, Val Loss=1.3403, Macro-F1=0.5577, Weighted-F1=0.7850, Bal-Acc=0.5650, Acc=0.7815
+Epoch 9/50: Train Loss=0.2655, Val Loss=1.9127, Macro-F1=0.5357, Weighted-F1=0.7821, Bal-Acc=0.5231, Acc=0.7873
+Epoch 10/50: Train Loss=0.1622, Val Loss=1.9917, Macro-F1=0.5621, Weighted-F1=0.7957, Bal-Acc=0.5501, Acc=0.8012
+Epoch 11/50: Train Loss=0.0918, Val Loss=2.4266, Macro-F1=0.5466, Weighted-F1=0.7902, Bal-Acc=0.5286, Acc=0.8000
+Epoch 12/50: Train Loss=0.0492, Val Loss=2.5039, Macro-F1=0.5480, Weighted-F1=0.7845, Bal-Acc=0.5375, Acc=0.7884
+Epoch 13/50: Train Loss=0.0319, Val Loss=2.8411, Macro-F1=0.5726, Weighted-F1=0.7942, Bal-Acc=0.5630, Acc=0.7988
+Epoch 14/50: Train Loss=0.0266, Val Loss=3.0851, Macro-F1=0.5503, Weighted-F1=0.7916, Bal-Acc=0.5353, Acc=0.8000
+Epoch 15/50: Train Loss=0.0016, Val Loss=3.3143, Macro-F1=0.5511, Weighted-F1=0.8000, Bal-Acc=0.5299, Acc=0.8127
+Epoch 16/50: Train Loss=0.0114, Val Loss=3.4710, Macro-F1=0.5577, Weighted-F1=0.7982, Bal-Acc=0.5337, Acc=0.8116
+Epoch 17/50: Train Loss=0.0004, Val Loss=3.6171, Macro-F1=0.5463, Weighted-F1=0.7950, Bal-Acc=0.5230, Acc=0.8092
+Epoch 18/50: Train Loss=0.0011, Val Loss=3.7879, Macro-F1=0.5412, Weighted-F1=0.7925, Bal-Acc=0.5214, Acc=0.8035
+Early stopping at epoch 18
+
+Training LSTM+Attention with class_weights strategy...
+Epoch 1/50: Train Loss=0.9859, Val Loss=0.9570, Macro-F1=0.4844, Weighted-F1=0.7316, Bal-Acc=0.5163, Acc=0.7110
+Epoch 2/50: Train Loss=0.7251, Val Loss=0.9835, Macro-F1=0.5231, Weighted-F1=0.7428, Bal-Acc=0.5676, Acc=0.7191
+Epoch 3/50: Train Loss=0.4873, Val Loss=1.2422, Macro-F1=0.4898, Weighted-F1=0.7290, Bal-Acc=0.5346, Acc=0.7040
+Epoch 4/50: Train Loss=0.3258, Val Loss=1.5481, Macro-F1=0.5327, Weighted-F1=0.7824, Bal-Acc=0.5357, Acc=0.7827
+Epoch 5/50: Train Loss=0.1874, Val Loss=1.8082, Macro-F1=0.5473, Weighted-F1=0.7844, Bal-Acc=0.5572, Acc=0.7780
+Epoch 6/50: Train Loss=0.0984, Val Loss=2.2431, Macro-F1=0.5257, Weighted-F1=0.7834, Bal-Acc=0.5198, Acc=0.7884
+Epoch 7/50: Train Loss=0.0565, Val Loss=2.4521, Macro-F1=0.5047, Weighted-F1=0.7752, Bal-Acc=0.4986, Acc=0.7803
+Epoch 8/50: Train Loss=0.0216, Val Loss=2.6684, Macro-F1=0.5161, Weighted-F1=0.7809, Bal-Acc=0.5108, Acc=0.7861
+Epoch 9/50: Train Loss=0.0064, Val Loss=2.9331, Macro-F1=0.5171, Weighted-F1=0.7813, Bal-Acc=0.5123, Acc=0.7896
+Epoch 10/50: Train Loss=0.0021, Val Loss=3.0305, Macro-F1=0.5230, Weighted-F1=0.7881, Bal-Acc=0.5193, Acc=0.7942
+Early stopping at epoch 10
+
+**************************************************
+Strategy: smote
+**************************************************
+Vocabulary size: 5594
+
+Training LSTM with smote strategy...
+Epoch 1/50: Train Loss=1.0986, Val Loss=1.1051, Macro-F1=0.0357, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 2/50: Train Loss=1.0976, Val Loss=1.1082, Macro-F1=0.1002, Weighted-F1=0.0532, Bal-Acc=0.3333, Acc=0.1769
+Epoch 3/50: Train Loss=1.0977, Val Loss=1.1252, Macro-F1=0.0379, Weighted-F1=0.0107, Bal-Acc=0.3343, Acc=0.0590
+Epoch 4/50: Train Loss=1.1040, Val Loss=1.0756, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.0988, Val Loss=1.0820, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 6/50: Train Loss=1.0780, Val Loss=0.8993, Macro-F1=0.4085, Weighted-F1=0.6577, Bal-Acc=0.4735, Acc=0.6312
+Epoch 7/50: Train Loss=0.8173, Val Loss=0.9563, Macro-F1=0.4904, Weighted-F1=0.7652, Bal-Acc=0.4986, Acc=0.7746
+Epoch 8/50: Train Loss=0.6476, Val Loss=0.8265, Macro-F1=0.5246, Weighted-F1=0.7533, Bal-Acc=0.5470, Acc=0.7283
+Epoch 9/50: Train Loss=0.5079, Val Loss=0.7059, Macro-F1=0.5399, Weighted-F1=0.7695, Bal-Acc=0.5286, Acc=0.7769
+Epoch 10/50: Train Loss=0.3096, Val Loss=0.7820, Macro-F1=0.5156, Weighted-F1=0.7649, Bal-Acc=0.5041, Acc=0.7734
+Epoch 11/50: Train Loss=0.2116, Val Loss=0.8139, Macro-F1=0.5315, Weighted-F1=0.7804, Bal-Acc=0.5082, Acc=0.7954
+Epoch 12/50: Train Loss=0.1827, Val Loss=0.8339, Macro-F1=0.5350, Weighted-F1=0.7859, Bal-Acc=0.5132, Acc=0.8012
+Epoch 13/50: Train Loss=0.1429, Val Loss=0.8800, Macro-F1=0.5299, Weighted-F1=0.7782, Bal-Acc=0.5085, Acc=0.7942
+Epoch 14/50: Train Loss=0.0865, Val Loss=1.0790, Macro-F1=0.5146, Weighted-F1=0.7795, Bal-Acc=0.4891, Acc=0.7988
+Early stopping at epoch 14
+
+Training BiLSTM with smote strategy...
+/usr/local/lib/python3.12/dist-packages/torch/nn/modules/rnn.py:123: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.3 and num_layers=1
+  warnings.warn(
+Epoch 1/50: Train Loss=0.4882, Val Loss=0.7283, Macro-F1=0.5172, Weighted-F1=0.7713, Bal-Acc=0.5045, Acc=0.7803
+Epoch 2/50: Train Loss=0.0840, Val Loss=0.9993, Macro-F1=0.4904, Weighted-F1=0.7734, Bal-Acc=0.4745, Acc=0.8000
+Epoch 3/50: Train Loss=0.0158, Val Loss=1.1520, Macro-F1=0.5130, Weighted-F1=0.7748, Bal-Acc=0.4991, Acc=0.7931
+Epoch 4/50: Train Loss=0.0063, Val Loss=1.2732, Macro-F1=0.4961, Weighted-F1=0.7761, Bal-Acc=0.4837, Acc=0.7942
+Epoch 5/50: Train Loss=0.0041, Val Loss=1.4085, Macro-F1=0.4919, Weighted-F1=0.7729, Bal-Acc=0.4798, Acc=0.7931
+Epoch 6/50: Train Loss=0.0095, Val Loss=1.4568, Macro-F1=0.5009, Weighted-F1=0.7766, Bal-Acc=0.4961, Acc=0.7919
+Early stopping at epoch 6
+
+Training GRU with smote strategy...
+Epoch 1/50: Train Loss=1.0993, Val Loss=1.0850, Macro-F1=0.1024, Weighted-F1=0.0579, Bal-Acc=0.3343, Acc=0.1792
+Epoch 2/50: Train Loss=1.0958, Val Loss=1.1455, Macro-F1=0.0357, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 3/50: Train Loss=1.0951, Val Loss=1.1209, Macro-F1=0.0357, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 4/50: Train Loss=1.0964, Val Loss=1.0821, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.0923, Val Loss=0.9386, Macro-F1=0.4571, Weighted-F1=0.6844, Bal-Acc=0.5122, Acc=0.6277
+Epoch 6/50: Train Loss=0.5861, Val Loss=0.8032, Macro-F1=0.4878, Weighted-F1=0.7674, Bal-Acc=0.4802, Acc=0.7861
+Epoch 7/50: Train Loss=0.1335, Val Loss=1.0042, Macro-F1=0.4938, Weighted-F1=0.7720, Bal-Acc=0.4872, Acc=0.7908
+Epoch 8/50: Train Loss=0.0532, Val Loss=1.1936, Macro-F1=0.4994, Weighted-F1=0.7751, Bal-Acc=0.4942, Acc=0.7954
+Epoch 9/50: Train Loss=0.0351, Val Loss=1.3199, Macro-F1=0.4813, Weighted-F1=0.7709, Bal-Acc=0.4643, Acc=0.7988
+Epoch 10/50: Train Loss=0.0204, Val Loss=1.2993, Macro-F1=0.4806, Weighted-F1=0.7681, Bal-Acc=0.4574, Acc=0.7954
+Epoch 11/50: Train Loss=0.0243, Val Loss=1.2533, Macro-F1=0.5019, Weighted-F1=0.7852, Bal-Acc=0.4923, Acc=0.8092
+Epoch 12/50: Train Loss=0.0207, Val Loss=1.5542, Macro-F1=0.4803, Weighted-F1=0.7719, Bal-Acc=0.4650, Acc=0.7965
+Epoch 13/50: Train Loss=0.0176, Val Loss=1.6278, Macro-F1=0.5044, Weighted-F1=0.7710, Bal-Acc=0.5047, Acc=0.7780
+Epoch 14/50: Train Loss=0.0145, Val Loss=1.5946, Macro-F1=0.4992, Weighted-F1=0.7806, Bal-Acc=0.4716, Acc=0.8058
+Epoch 15/50: Train Loss=0.0271, Val Loss=1.3063, Macro-F1=0.5052, Weighted-F1=0.7878, Bal-Acc=0.4840, Acc=0.8104
+Epoch 16/50: Train Loss=0.0204, Val Loss=1.5334, Macro-F1=0.4896, Weighted-F1=0.7565, Bal-Acc=0.4884, Acc=0.7607
+Epoch 17/50: Train Loss=0.0160, Val Loss=1.6033, Macro-F1=0.4870, Weighted-F1=0.7761, Bal-Acc=0.4720, Acc=0.8012
+Epoch 18/50: Train Loss=0.0005, Val Loss=1.7905, Macro-F1=0.4915, Weighted-F1=0.7790, Bal-Acc=0.4786, Acc=0.8046
+Epoch 19/50: Train Loss=0.0025, Val Loss=1.6262, Macro-F1=0.4970, Weighted-F1=0.7789, Bal-Acc=0.4805, Acc=0.8023
+Epoch 20/50: Train Loss=0.0119, Val Loss=1.7311, Macro-F1=0.4767, Weighted-F1=0.7625, Bal-Acc=0.4737, Acc=0.7780
+Early stopping at epoch 20
+
+Training LSTM+Attention with smote strategy...
+Epoch 1/50: Train Loss=0.4740, Val Loss=0.7967, Macro-F1=0.4807, Weighted-F1=0.7577, Bal-Acc=0.4594, Acc=0.7827
+Epoch 2/50: Train Loss=0.0885, Val Loss=1.0921, Macro-F1=0.4653, Weighted-F1=0.7497, Bal-Acc=0.4473, Acc=0.7769
+Epoch 3/50: Train Loss=0.0230, Val Loss=1.3184, Macro-F1=0.4848, Weighted-F1=0.7596, Bal-Acc=0.4644, Acc=0.7827
+Epoch 4/50: Train Loss=0.0071, Val Loss=1.4518, Macro-F1=0.4554, Weighted-F1=0.7492, Bal-Acc=0.4420, Acc=0.7792
+Epoch 5/50: Train Loss=0.0006, Val Loss=1.6790, Macro-F1=0.4605, Weighted-F1=0.7567, Bal-Acc=0.4420, Acc=0.7908
+Epoch 6/50: Train Loss=0.0002, Val Loss=1.7667, Macro-F1=0.4614, Weighted-F1=0.7568, Bal-Acc=0.4436, Acc=0.7908
+Epoch 7/50: Train Loss=0.0001, Val Loss=1.8397, Macro-F1=0.4609, Weighted-F1=0.7574, Bal-Acc=0.4436, Acc=0.7908
+Epoch 8/50: Train Loss=0.0001, Val Loss=1.8993, Macro-F1=0.4569, Weighted-F1=0.7550, Bal-Acc=0.4398, Acc=0.7896
+Early stopping at epoch 8
+
+**************************************************
+Strategy: hybrid
+**************************************************
+Vocabulary size: 3410
+
+Training LSTM with hybrid strategy...
+Epoch 1/50: Train Loss=1.1008, Val Loss=1.1218, Macro-F1=0.0357, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 2/50: Train Loss=1.1067, Val Loss=1.0315, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 3/50: Train Loss=1.1000, Val Loss=1.1394, Macro-F1=0.0357, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 4/50: Train Loss=1.1010, Val Loss=1.0958, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.0995, Val Loss=1.0745, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 6/50: Train Loss=1.0996, Val Loss=1.1103, Macro-F1=0.1002, Weighted-F1=0.0532, Bal-Acc=0.3333, Acc=0.1769
+Epoch 7/50: Train Loss=1.1007, Val Loss=1.0898, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Early stopping at epoch 7
+
+Training BiLSTM with hybrid strategy...
+/usr/local/lib/python3.12/dist-packages/torch/nn/modules/rnn.py:123: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.3 and num_layers=1
+  warnings.warn(
+Epoch 1/50: Train Loss=0.8628, Val Loss=0.8036, Macro-F1=0.4783, Weighted-F1=0.7020, Bal-Acc=0.5261, Acc=0.6613
+Epoch 2/50: Train Loss=0.3649, Val Loss=0.8466, Macro-F1=0.4558, Weighted-F1=0.6832, Bal-Acc=0.5084, Acc=0.6543
+Epoch 3/50: Train Loss=0.1463, Val Loss=0.8184, Macro-F1=0.5104, Weighted-F1=0.7584, Bal-Acc=0.5243, Acc=0.7526
+Epoch 4/50: Train Loss=0.0704, Val Loss=0.9260, Macro-F1=0.4975, Weighted-F1=0.7503, Bal-Acc=0.5106, Acc=0.7434
+Epoch 5/50: Train Loss=0.0218, Val Loss=1.1874, Macro-F1=0.4909, Weighted-F1=0.7473, Bal-Acc=0.5134, Acc=0.7410
+Epoch 6/50: Train Loss=0.0129, Val Loss=1.2905, Macro-F1=0.4864, Weighted-F1=0.7414, Bal-Acc=0.4991, Acc=0.7283
+Epoch 7/50: Train Loss=0.0054, Val Loss=1.3196, Macro-F1=0.4902, Weighted-F1=0.7581, Bal-Acc=0.4962, Acc=0.7584
+Epoch 8/50: Train Loss=0.0033, Val Loss=1.4087, Macro-F1=0.4873, Weighted-F1=0.7383, Bal-Acc=0.5024, Acc=0.7283
+Early stopping at epoch 8
+
+Training GRU with hybrid strategy...
+Epoch 1/50: Train Loss=1.1000, Val Loss=1.1334, Macro-F1=0.1002, Weighted-F1=0.0532, Bal-Acc=0.3333, Acc=0.1769
+Epoch 2/50: Train Loss=1.0981, Val Loss=1.1153, Macro-F1=0.0358, Weighted-F1=0.0061, Bal-Acc=0.3333, Acc=0.0566
+Epoch 3/50: Train Loss=1.0952, Val Loss=1.0574, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 4/50: Train Loss=1.0952, Val Loss=1.0860, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 5/50: Train Loss=1.0949, Val Loss=1.1140, Macro-F1=0.0389, Weighted-F1=0.0130, Bal-Acc=0.3348, Acc=0.0601
+Epoch 6/50: Train Loss=1.0935, Val Loss=1.0275, Macro-F1=0.2893, Weighted-F1=0.6651, Bal-Acc=0.3333, Acc=0.7665
+Epoch 7/50: Train Loss=1.0930, Val Loss=1.1126, Macro-F1=0.0401, Weighted-F1=0.0153, Bal-Acc=0.3353, Acc=0.0613
+Epoch 8/50: Train Loss=1.0917, Val Loss=1.1428, Macro-F1=0.0379, Weighted-F1=0.0107, Bal-Acc=0.3343, Acc=0.0590
+Early stopping at epoch 8
+
+Training LSTM+Attention with hybrid strategy...
+Epoch 1/50: Train Loss=0.8651, Val Loss=0.8229, Macro-F1=0.4924, Weighted-F1=0.6855, Bal-Acc=0.5794, Acc=0.6312
+Epoch 2/50: Train Loss=0.3368, Val Loss=0.7309, Macro-F1=0.5183, Weighted-F1=0.7526, Bal-Acc=0.5460, Acc=0.7329
+Epoch 3/50: Train Loss=0.1883, Val Loss=0.9694, Macro-F1=0.4930, Weighted-F1=0.7481, Bal-Acc=0.5216, Acc=0.7329
+Epoch 4/50: Train Loss=0.0563, Val Loss=1.1390, Macro-F1=0.4854, Weighted-F1=0.7366, Bal-Acc=0.5201, Acc=0.7179
+Epoch 5/50: Train Loss=0.0186, Val Loss=1.2502, Macro-F1=0.5103, Weighted-F1=0.7495, Bal-Acc=0.5332, Acc=0.7364
+Epoch 6/50: Train Loss=0.0084, Val Loss=1.3513, Macro-F1=0.5205, Weighted-F1=0.7596, Bal-Acc=0.5397, Acc=0.7445
+Epoch 7/50: Train Loss=0.0052, Val Loss=1.3950, Macro-F1=0.5081, Weighted-F1=0.7533, Bal-Acc=0.5330, Acc=0.7387
+Epoch 8/50: Train Loss=0.0012, Val Loss=1.4119, Macro-F1=0.5170, Weighted-F1=0.7619, Bal-Acc=0.5337, Acc=0.7491
+Epoch 9/50: Train Loss=0.0005, Val Loss=1.4771, Macro-F1=0.5138, Weighted-F1=0.7596, Bal-Acc=0.5305, Acc=0.7457
+Epoch 10/50: Train Loss=0.0004, Val Loss=1.5304, Macro-F1=0.5093, Weighted-F1=0.7558, Bal-Acc=0.5240, Acc=0.7422
+Epoch 11/50: Train Loss=0.0003, Val Loss=1.5790, Macro-F1=0.5091, Weighted-F1=0.7549, Bal-Acc=0.5252, Acc=0.7410
+Early stopping at epoch 11
+
+============================================================
+Training Transformer Models
+============================================================
+config.json: 100%|█████████████████████████████| 557/557 [00:00<00:00, 2.00MB/s]
+vocab.txt: 895kB [00:00, 41.3MB/s]
+bpe.codes: 1.14MB [00:00, 111MB/s]
+tokenizer.json: 3.13MB [00:00, 160MB/s]
+
+**************************************************
+PhoBERT - Strategy: none
+**************************************************
+
+Training PhoBERT with none strategy...
+pytorch_model.bin: 100%|██████████████████████| 543M/543M [00:02<00:00, 218MB/s]
+Loading weights: 100%|█| 199/199 [00:00<00:00, 3360.41it/s, Materializing param=
+RobertaModel LOAD REPORT from: vinai/phobert-base
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+lm_head.layer_norm.weight       | UNEXPECTED |  | 
+lm_head.layer_norm.bias         | UNEXPECTED |  | 
+lm_head.dense.weight            | UNEXPECTED |  | 
+lm_head.dense.bias              | UNEXPECTED |  | 
+roberta.embeddings.position_ids | UNEXPECTED |  | 
+lm_head.decoder.bias            | UNEXPECTED |  | 
+lm_head.bias                    | UNEXPECTED |  | 
+lm_head.decoder.weight          | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+model.safetensors: 100%|██████████████████████| 543M/543M [00:01<00:00, 289MB/s]
+Epoch 1/50: Train Loss=0.5021, Val Loss=0.5992, Macro-F1=0.4892, Weighted-F1=0.7918, Bal-Acc=0.4681, Acc=0.8335
+Epoch 2/50: Train Loss=0.4080, Val Loss=0.5950, Macro-F1=0.5406, Weighted-F1=0.8096, Bal-Acc=0.5326, Acc=0.8266
+Epoch 3/50: Train Loss=0.3534, Val Loss=0.6048, Macro-F1=0.5598, Weighted-F1=0.8192, Bal-Acc=0.5408, Acc=0.8416
+Epoch 4/50: Train Loss=0.3120, Val Loss=0.6873, Macro-F1=0.5720, Weighted-F1=0.8142, Bal-Acc=0.5648, Acc=0.8139
+Epoch 5/50: Train Loss=0.2442, Val Loss=0.8064, Macro-F1=0.5713, Weighted-F1=0.8114, Bal-Acc=0.5683, Acc=0.8162
+Epoch 6/50: Train Loss=0.1907, Val Loss=0.9951, Macro-F1=0.5454, Weighted-F1=0.7972, Bal-Acc=0.5190, Acc=0.8116
+Epoch 7/50: Train Loss=0.1565, Val Loss=1.1413, Macro-F1=0.5330, Weighted-F1=0.7897, Bal-Acc=0.5456, Acc=0.7919
+Epoch 8/50: Train Loss=0.1317, Val Loss=1.2410, Macro-F1=0.5520, Weighted-F1=0.7959, Bal-Acc=0.5476, Acc=0.7965
+Epoch 9/50: Train Loss=0.0817, Val Loss=1.2840, Macro-F1=0.5429, Weighted-F1=0.7990, Bal-Acc=0.5280, Acc=0.8035
+Early stopping at epoch 9
+
+**************************************************
+PhoBERT - Strategy: class_weights
+**************************************************
+
+Training PhoBERT with class_weights strategy...
+Loading weights: 100%|█| 199/199 [00:00<00:00, 3079.33it/s, Materializing param=
+RobertaModel LOAD REPORT from: vinai/phobert-base
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+lm_head.layer_norm.weight       | UNEXPECTED |  | 
+lm_head.layer_norm.bias         | UNEXPECTED |  | 
+lm_head.dense.weight            | UNEXPECTED |  | 
+lm_head.dense.bias              | UNEXPECTED |  | 
+roberta.embeddings.position_ids | UNEXPECTED |  | 
+lm_head.decoder.bias            | UNEXPECTED |  | 
+lm_head.bias                    | UNEXPECTED |  | 
+lm_head.decoder.weight          | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Epoch 1/50: Train Loss=0.9521, Val Loss=1.1295, Macro-F1=0.5323, Weighted-F1=0.8127, Bal-Acc=0.5295, Acc=0.8370
+Epoch 2/50: Train Loss=0.8761, Val Loss=1.2538, Macro-F1=0.5399, Weighted-F1=0.8090, Bal-Acc=0.5166, Acc=0.8324
+Epoch 3/50: Train Loss=0.8539, Val Loss=1.2630, Macro-F1=0.5227, Weighted-F1=0.8046, Bal-Acc=0.5340, Acc=0.8243
+Epoch 4/50: Train Loss=0.7658, Val Loss=1.4770, Macro-F1=0.5333, Weighted-F1=0.8128, Bal-Acc=0.5471, Acc=0.8312
+Epoch 5/50: Train Loss=0.6171, Val Loss=1.3502, Macro-F1=0.5705, Weighted-F1=0.8020, Bal-Acc=0.5689, Acc=0.8012
+Epoch 6/50: Train Loss=0.4595, Val Loss=1.9319, Macro-F1=0.5579, Weighted-F1=0.7952, Bal-Acc=0.5586, Acc=0.7919
+Epoch 7/50: Train Loss=0.3483, Val Loss=2.0766, Macro-F1=0.5688, Weighted-F1=0.8052, Bal-Acc=0.5696, Acc=0.8046
+Epoch 8/50: Train Loss=0.2889, Val Loss=2.6012, Macro-F1=0.5439, Weighted-F1=0.7979, Bal-Acc=0.5186, Acc=0.8127
+Epoch 9/50: Train Loss=0.2041, Val Loss=2.6256, Macro-F1=0.5475, Weighted-F1=0.8099, Bal-Acc=0.5427, Acc=0.8162
+Epoch 10/50: Train Loss=0.1805, Val Loss=2.7798, Macro-F1=0.5563, Weighted-F1=0.8057, Bal-Acc=0.5494, Acc=0.8104
+Early stopping at epoch 10
+
+**************************************************
+PhoBERT - Strategy: smote
+**************************************************
+
+Training PhoBERT with smote strategy...
+Loading weights: 100%|█| 199/199 [00:00<00:00, 3553.98it/s, Materializing param=
+RobertaModel LOAD REPORT from: vinai/phobert-base
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+lm_head.layer_norm.weight       | UNEXPECTED |  | 
+lm_head.layer_norm.bias         | UNEXPECTED |  | 
+lm_head.dense.weight            | UNEXPECTED |  | 
+lm_head.dense.bias              | UNEXPECTED |  | 
+roberta.embeddings.position_ids | UNEXPECTED |  | 
+lm_head.decoder.bias            | UNEXPECTED |  | 
+lm_head.bias                    | UNEXPECTED |  | 
+lm_head.decoder.weight          | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
@@ -15,20 +15,25 @@ from train_models import *
 import time
 import json
 import os
+import gc
 import argparse
 from collections import defaultdict
 
 # Configuration
 CONFIG = {
     'batch_size_rnn': 16,
-    'batch_size_transformer': 8,
-    'learning_rate_rnn': 0.001,
+    'batch_size_transformer': 4,
+    'learning_rate_rnn': 5e-4,
     'learning_rate_transformer': 2e-5,
+    'weight_decay_rnn': 1e-5,
+    'weight_decay_transformer': 1e-2,
+    'label_smoothing': 0.05,
     'num_epochs': 50,
     'patience': 5,
     'max_len': 128,
     'embedding_dim': 300,
     'hidden_dim': 128,
+    'val_ratio_within_train': 0.1,
 }
 
 # Results storage
@@ -90,7 +95,55 @@ def resample_text_data(texts, labels, strategy='none'):
     return X, y
 
 
-def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strategy='none'):
+def split_train_val_chronological(train_df, val_ratio):
+    """Split training slice into train/validation while keeping temporal order."""
+    val_size = max(1, int(len(train_df) * val_ratio))
+    if val_size >= len(train_df):
+        val_size = max(1, len(train_df) - 1)
+
+    model_train_df = train_df.iloc[:-val_size].reset_index(drop=True)
+    val_df = train_df.iloc[-val_size:].reset_index(drop=True)
+    return model_train_df, val_df
+
+
+def create_train_loader(dataset, batch_size, strategy):
+    """Create training loader and optionally rebalance with weighted sampling."""
+    labels = np.asarray(dataset.labels)
+    class_counts = np.bincount(labels, minlength=3).astype(np.float32)
+    class_counts[class_counts == 0] = 1.0
+
+    if strategy == 'class_weights':
+        sample_weights = 1.0 / class_counts[labels]
+        sampler = WeightedRandomSampler(
+            weights=torch.tensor(sample_weights, dtype=torch.double),
+            num_samples=len(sample_weights),
+            replacement=True,
+        )
+        return DataLoader(dataset, batch_size=batch_size, sampler=sampler)
+
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+
+def save_intermediate_results(output_dir):
+    """Persist partial results after each model to avoid losing long runs."""
+    table2_path = os.path.join(output_dir, 'results_table2_overall.csv')
+    table3_path = os.path.join(output_dir, 'results_table3_perclass.csv')
+    history_path = os.path.join(output_dir, 'training_history.json')
+
+    pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
+    pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
+    with open(history_path, 'w') as f:
+        json.dump(all_results['training_history'], f, indent=2)
+
+
+def cleanup_memory():
+    """Release Python and CUDA cached memory between long training runs."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def train_rnn_model(model_name, train_dataset, val_dataset, test_dataset, vocab_size, strategy='none'):
     """Train RNN-based model (LSTM, BiLSTM, GRU, LSTM+Attention)"""
     
     print(f"\nTraining {model_name} with {strategy} strategy...")
@@ -110,19 +163,26 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
                                        CONFIG['hidden_dim']).to(device)
     
     # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=CONFIG['batch_size_rnn'], 
-                             shuffle=True)
+    train_loader = create_train_loader(train_dataset, CONFIG['batch_size_rnn'], strategy)
+    val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size_rnn'])
     test_loader = DataLoader(test_dataset, batch_size=CONFIG['batch_size_rnn'])
     
     # Setup training
-    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['learning_rate_rnn'])
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=CONFIG['learning_rate_rnn'],
+        weight_decay=CONFIG['weight_decay_rnn'],
+    )
     
     # Loss function based on strategy
     if strategy == 'class_weights':
         class_weights = get_class_weights(train_dataset.labels)
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights,
+            label_smoothing=CONFIG['label_smoothing'],
+        )
     else:
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(label_smoothing=CONFIG['label_smoothing'])
     
     # Training loop
     best_f1 = -1
@@ -130,13 +190,15 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
     patience_counter = 0
     train_losses, val_losses = [], []
     
+    model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
+
     for epoch in range(CONFIG['num_epochs']):
         # Train
         train_loss, train_f1 = train_epoch(model, train_loader, optimizer, 
                                           criterion, device, 'rnn')
         
         # Evaluate
-        val_metrics = evaluate(model, test_loader, criterion, device, 'rnn')
+        val_metrics = evaluate(model, val_loader, criterion, device, 'rnn')
         val_loss = val_metrics['loss']
         val_f1 = val_metrics['macro_f1']
         val_weighted_f1 = val_metrics['weighted_f1']
@@ -158,8 +220,7 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
             best_f1 = val_f1
             best_metrics = val_metrics
             patience_counter = 0
-            # Save best model
-            model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
+            # Save best model by validation Macro-F1
             torch.save(model.state_dict(), model_path)
         else:
             patience_counter += 1
@@ -168,16 +229,28 @@ def train_rnn_model(model_name, train_dataset, test_dataset, vocab_size, strateg
             print(f"Early stopping at epoch {epoch+1}")
             break
     
+    # Evaluate best checkpoint on held-out test set
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    best_metrics = evaluate(model, test_loader, criterion, device, 'rnn')
+    best_metrics['best_val_macro_f1'] = best_f1
+
     # Store training history
     all_results['training_history'][f'{model_name}_{strategy}'] = {
         'train_losses': train_losses,
-        'val_losses': val_losses
+        'val_losses': val_losses,
+        'best_val_macro_f1': best_f1,
     }
     
-    return best_metrics
+    final_metrics = dict(best_metrics)
+
+    # Explicit cleanup helps avoid RAM/VRAM accumulation in long experiment loops.
+    del model, optimizer, criterion, train_loader, val_loader, test_loader
+    cleanup_memory()
+
+    return final_metrics
 
 
-def train_transformer_model(model_name, train_dataset, test_dataset, strategy='none'):
+def train_transformer_model(model_name, train_dataset, val_dataset, test_dataset, strategy='none'):
     """Train Transformer-based model (PhoBERT, XLM-RoBERTa)"""
     
     print(f"\nTraining {model_name} with {strategy} strategy...")
@@ -189,19 +262,26 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
         model = XLMRClassifier('xlm-roberta-base').to(device)
     
     # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=CONFIG['batch_size_transformer'], 
-                             shuffle=True)
+    train_loader = create_train_loader(train_dataset, CONFIG['batch_size_transformer'], strategy)
+    val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size_transformer'])
     test_loader = DataLoader(test_dataset, batch_size=CONFIG['batch_size_transformer'])
     
     # Setup training
-    optimizer = torch.optim.AdamW(model.parameters(), lr=CONFIG['learning_rate_transformer'])
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=CONFIG['learning_rate_transformer'],
+        weight_decay=CONFIG['weight_decay_transformer'],
+    )
     
     # Loss function based on strategy
     if strategy == 'class_weights':
         class_weights = get_class_weights(train_dataset.labels)
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights,
+            label_smoothing=CONFIG['label_smoothing'],
+        )
     else:
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(label_smoothing=CONFIG['label_smoothing'])
     
     # Training loop
     best_f1 = -1
@@ -211,13 +291,15 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
     
     start_time = time.time()
     
+    model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
+
     for epoch in range(CONFIG['num_epochs']):
         # Train
         train_loss, train_f1 = train_epoch(model, train_loader, optimizer, 
                                           criterion, device, 'transformer')
         
         # Evaluate
-        val_metrics = evaluate(model, test_loader, criterion, device, 'transformer')
+        val_metrics = evaluate(model, val_loader, criterion, device, 'transformer')
         val_loss = val_metrics['loss']
         val_f1 = val_metrics['macro_f1']
         val_weighted_f1 = val_metrics['weighted_f1']
@@ -239,7 +321,6 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
             best_f1 = val_f1
             best_metrics = val_metrics
             patience_counter = 0
-            model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_best.pt')
             torch.save(model.state_dict(), model_path)
         else:
             patience_counter += 1
@@ -249,15 +330,27 @@ def train_transformer_model(model_name, train_dataset, test_dataset, strategy='n
             break
     
     train_time = (time.time() - start_time) / 60  # in minutes
+
+    # Evaluate best checkpoint on held-out test set
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    best_metrics = evaluate(model, test_loader, criterion, device, 'transformer')
     best_metrics['train_time'] = train_time
+    best_metrics['best_val_macro_f1'] = best_f1
     
     # Store training history
     all_results['training_history'][f'{model_name}_{strategy}'] = {
         'train_losses': train_losses,
-        'val_losses': val_losses
+        'val_losses': val_losses,
+        'best_val_macro_f1': best_f1,
     }
     
-    return best_metrics
+    final_metrics = dict(best_metrics)
+
+    # Explicit cleanup helps avoid RAM/VRAM accumulation in long experiment loops.
+    del model, optimizer, criterion, train_loader, val_loader, test_loader
+    cleanup_memory()
+
+    return final_metrics
 
 
 def run_all_experiments(args):
@@ -282,18 +375,24 @@ def run_all_experiments(args):
     print(f"Data path: {args.data_path}")
     df = load_data(args.data_path)
     
-    # Split data chronologically
+    # Split data chronologically: 80% train+val, 20% held-out test.
     train_size = int(0.8 * len(df))
-    train_df = df.iloc[:train_size].reset_index(drop=True)
+    trainval_df = df.iloc[:train_size].reset_index(drop=True)
     test_df = df.iloc[train_size:].reset_index(drop=True)
-    
-    print(f"Train: {len(train_df)}, Test: {len(test_df)}")
-    print(f"Train sentiment distribution:")
-    print(train_df['sentiment'].value_counts())
+    model_train_df, val_df = split_train_val_chronological(
+        trainval_df,
+        CONFIG['val_ratio_within_train'],
+    )
+
+    print(f"Train: {len(model_train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+    print("Train sentiment distribution:")
+    print(model_train_df['sentiment'].value_counts())
     
     # Extract data
-    X_train_text = train_df['content'].values
-    y_train = train_df['sentiment_label'].values
+    X_train_text = model_train_df['content'].values
+    y_train = model_train_df['sentiment_label'].values
+    X_val_text = val_df['content'].values
+    y_val = val_df['sentiment_label'].values
     X_test_text = test_df['content'].values
     y_test = test_df['sentiment_label'].values
     
@@ -329,6 +428,9 @@ def run_all_experiments(args):
         # Create datasets
         train_dataset = SentimentDataset(X_train_resampled, y_train_resampled, 
                                         max_len=CONFIG['max_len'])
+        val_dataset = SentimentDataset(X_val_text, y_val,
+                          vocab=train_dataset.vocab,
+                          max_len=CONFIG['max_len'])
         test_dataset = SentimentDataset(X_test_text, y_test, 
                                        vocab=train_dataset.vocab, 
                                        max_len=CONFIG['max_len'])
@@ -338,7 +440,7 @@ def run_all_experiments(args):
         
         # Train each RNN model
         for model_name in rnn_models:
-            metrics = train_rnn_model(model_name, train_dataset, test_dataset, 
+            metrics = train_rnn_model(model_name, train_dataset, val_dataset, test_dataset,
                                      vocab_size, strategy)
             
             # Store results for Table 2 (Overall performance)
@@ -374,6 +476,9 @@ def run_all_experiments(args):
                     'Recall': metrics['per_class']['recall'][1],
                     'F1': metrics['per_class']['f1'][1]
                 })
+
+            save_intermediate_results(args.output_dir)
+            cleanup_memory()
     
     # ====================
     # Transformer Models
@@ -403,11 +508,13 @@ def run_all_experiments(args):
             # Create datasets
             train_dataset = TransformerDataset(X_train_resampled, y_train_resampled, 
                                               tokenizer, max_len=CONFIG['max_len'])
+            val_dataset = TransformerDataset(X_val_text, y_val,
+                                            tokenizer, max_len=CONFIG['max_len'])
             test_dataset = TransformerDataset(X_test_text, y_test, 
                                              tokenizer, max_len=CONFIG['max_len'])
             
             # Train
-            metrics = train_transformer_model(model_name, train_dataset, 
+            metrics = train_transformer_model(model_name, train_dataset, val_dataset,
                                              test_dataset, strategy)
             
             # Store results
@@ -443,6 +550,9 @@ def run_all_experiments(args):
                     'Recall': metrics['per_class']['recall'][1],
                     'F1': metrics['per_class']['f1'][1]
                 })
+
+            save_intermediate_results(args.output_dir)
+            cleanup_memory()
     
     # Save all results
     print("\n" + "="*60)
@@ -483,8 +593,10 @@ if __name__ == '__main__':
                        help='Early stopping patience (default: 5)')
     parser.add_argument('--batch-size-rnn', type=int, default=16,
                        help='Batch size for RNN models (default: 16)')
-    parser.add_argument('--batch-size-transformer', type=int, default=8,
-                       help='Batch size for Transformer models (default: 8)')
+    parser.add_argument('--batch-size-transformer', type=int, default=4,
+                       help='Batch size for Transformer models (default: 4)')
+    parser.add_argument('--val-ratio', type=float, default=0.1,
+                       help='Validation ratio within training split (default: 0.1)')
     
     args = parser.parse_args()
     
@@ -493,6 +605,7 @@ if __name__ == '__main__':
     CONFIG['patience'] = args.patience
     CONFIG['batch_size_rnn'] = args.batch_size_rnn
     CONFIG['batch_size_transformer'] = args.batch_size_transformer
+    CONFIG['val_ratio_within_train'] = args.val_ratio
     
     print("\nConfiguration:")
     print(f"  Data path: {args.data_path}")
@@ -502,6 +615,7 @@ if __name__ == '__main__':
     print(f"  Patience: {args.patience}")
     print(f"  Batch size (RNN): {args.batch_size_rnn}")
     print(f"  Batch size (Transformer): {args.batch_size_transformer}")
+    print(f"  Validation ratio (within train): {args.val_ratio}")
     
     results = run_all_experiments(args)
     print("\n" + "="*60)

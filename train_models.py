@@ -5,6 +5,7 @@ Provides data loading, datasets, model definitions, and train/eval utilities.
 
 from __future__ import annotations
 
+import re
 import numpy as np
 import pandas as pd
 import torch
@@ -101,6 +102,13 @@ def preprocess_text(text) -> str:
         return ""
 
     text = str(text).strip().lower()
+
+    # Remove links and html artifacts while preserving sentence structure.
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    # Remove emoji and other non-text symbols that are often noisy in app reviews.
+    text = re.sub(r"[\U00010000-\U0010ffff]", " ", text)
 
     teen_code_map = {
         " ko ": " khong ",
@@ -231,12 +239,21 @@ class LSTMClassifier(nn.Module):
 
 
 class BiLSTMClassifier(nn.Module):
-    def __init__(self, vocab_size, embedding_dim=300, hidden_dim=128, num_classes=3, dropout=0.3):
+    def __init__(
+        self,
+        vocab_size,
+        embedding_dim=300,
+        hidden_dim=128,
+        num_classes=3,
+        num_layers=2,
+        dropout=0.3,
+    ):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.bilstm = nn.LSTM(
             embedding_dim,
             hidden_dim,
+            num_layers=num_layers,
             batch_first=True,
             bidirectional=True,
             dropout=dropout,
