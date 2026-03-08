@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModel
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from train_models import *
@@ -18,6 +18,7 @@ import os
 import gc
 import argparse
 from collections import defaultdict
+from sklearn.metrics import precision_recall_fscore_support
 
 
 ASPECT_CATEGORIES = [
@@ -215,11 +216,13 @@ def save_intermediate_results(output_dir):
     table2_path = os.path.join(output_dir, 'results_table2_overall.csv')
     table3_path = os.path.join(output_dir, 'results_table3_perclass.csv')
     table5_path = os.path.join(output_dir, 'results_table5_aspect.csv')
+    table6_path = os.path.join(output_dir, 'results_table6_multitask.csv')
     history_path = os.path.join(output_dir, 'training_history.json')
 
     pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
     pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
     pd.DataFrame(all_results['aspect_performance']).to_csv(table5_path, index=False)
+    pd.DataFrame(all_results['multitask_performance']).to_csv(table6_path, index=False)
     with open(history_path, 'w') as f:
         json.dump(all_results['training_history'], f, indent=2)
 
@@ -441,6 +444,249 @@ def train_transformer_model(model_name, train_dataset, val_dataset, test_dataset
     return final_metrics
 
 
+class MultiTaskTransformerClassifier(nn.Module):
+    """Shared encoder with task-specific heads for sentiment/rating/aspect."""
+
+    def __init__(self, model_name, aspect_dim=len(ASPECT_CATEGORIES), dropout=0.1):
+        super().__init__()
+        self.encoder = AutoModel.from_pretrained(model_name)
+        hidden_size = self.encoder.config.hidden_size
+        self.dropout = nn.Dropout(dropout)
+        self.sentiment_head = nn.Linear(hidden_size, 3)
+        self.rating_head = nn.Linear(hidden_size, 5)
+        self.aspect_head = nn.Linear(hidden_size, aspect_dim)
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = outputs.pooler_output
+        if pooled is None:
+            pooled = outputs.last_hidden_state[:, 0, :]
+        pooled = self.dropout(pooled)
+        return (
+            self.sentiment_head(pooled),
+            self.rating_head(pooled),
+            self.aspect_head(pooled),
+        )
+
+
+def train_epoch_multitask(model, dataloader, optimizer, losses, weights, target_device):
+    """One epoch for multi-task transformer training."""
+    model.train()
+    total_loss = 0.0
+    sent_preds = []
+    sent_labels = []
+
+    for batch in dataloader:
+        optimizer.zero_grad()
+
+        labels = batch['labels'].squeeze(1).to(target_device)
+        ratings = batch['ratings'].squeeze(1).to(target_device)
+        aspects = batch['aspects'].to(target_device)
+
+        sent_logits, rating_logits, aspect_logits = model(
+            batch['input_ids'].to(target_device),
+            batch['attention_mask'].to(target_device),
+        )
+
+        sent_loss = losses['sentiment'](sent_logits, labels)
+        rating_loss = losses['rating'](rating_logits, ratings)
+        aspect_loss = losses['aspect'](aspect_logits, aspects)
+        loss = (
+            weights['alpha'] * sent_loss
+            + weights['beta'] * rating_loss
+            + weights['gamma'] * aspect_loss
+        )
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        total_loss += float(loss.item())
+        sent_preds.extend(torch.argmax(sent_logits, dim=1).detach().cpu().numpy().tolist())
+        sent_labels.extend(labels.detach().cpu().numpy().tolist())
+
+    avg_loss = total_loss / max(len(dataloader), 1)
+    sent_macro_f1 = f1_score(sent_labels, sent_preds, average='macro', zero_division=0)
+    return avg_loss, sent_macro_f1
+
+
+def evaluate_multitask(model, dataloader, losses, weights, target_device):
+    """Evaluate multi-task model and return metrics for Table 6."""
+    model.eval()
+    total_loss = 0.0
+
+    sent_preds, sent_labels = [], []
+    rating_preds, rating_labels = [], []
+    aspect_preds, aspect_labels = [], []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            labels = batch['labels'].squeeze(1).to(target_device)
+            ratings = batch['ratings'].squeeze(1).to(target_device)
+            aspects = batch['aspects'].to(target_device)
+
+            sent_logits, rating_logits, aspect_logits = model(
+                batch['input_ids'].to(target_device),
+                batch['attention_mask'].to(target_device),
+            )
+
+            sent_loss = losses['sentiment'](sent_logits, labels)
+            rating_loss = losses['rating'](rating_logits, ratings)
+            aspect_loss = losses['aspect'](aspect_logits, aspects)
+            loss = (
+                weights['alpha'] * sent_loss
+                + weights['beta'] * rating_loss
+                + weights['gamma'] * aspect_loss
+            )
+            total_loss += float(loss.item())
+
+            sent_preds.extend(torch.argmax(sent_logits, dim=1).detach().cpu().numpy().tolist())
+            sent_labels.extend(labels.detach().cpu().numpy().tolist())
+
+            rating_preds.extend(torch.argmax(rating_logits, dim=1).detach().cpu().numpy().tolist())
+            rating_labels.extend(ratings.detach().cpu().numpy().tolist())
+
+            batch_aspect_preds = (torch.sigmoid(aspect_logits) >= 0.5).int().cpu().numpy()
+            batch_aspect_labels = aspects.int().cpu().numpy()
+            aspect_preds.extend(batch_aspect_preds.tolist())
+            aspect_labels.extend(batch_aspect_labels.tolist())
+
+    precision, recall, f1_scores, _ = precision_recall_fscore_support(
+        sent_labels,
+        sent_preds,
+        labels=[0, 1, 2],
+        average=None,
+        zero_division=0,
+    )
+
+    rating_mae = float(np.mean(np.abs(np.asarray(rating_preds) - np.asarray(rating_labels))))
+    aspect_macro_f1 = f1_score(
+        np.asarray(aspect_labels),
+        np.asarray(aspect_preds),
+        average='macro',
+        zero_division=0,
+    )
+
+    return {
+        'loss': total_loss / max(len(dataloader), 1),
+        'macro_f1': f1_score(sent_labels, sent_preds, average='macro', zero_division=0),
+        'weighted_f1': f1_score(sent_labels, sent_preds, average='weighted', zero_division=0),
+        'accuracy': accuracy_score(sent_labels, sent_preds),
+        'balanced_accuracy': balanced_accuracy_score(sent_labels, sent_preds),
+        'rating_mae': rating_mae,
+        'aspect_f1': float(aspect_macro_f1),
+        'per_class': {
+            'precision': precision.tolist(),
+            'recall': recall.tolist(),
+            'f1': f1_scores.tolist(),
+        },
+        'predictions': sent_preds,
+        'true_labels': sent_labels,
+    }
+
+
+def train_multitask_transformer_model(
+    model_name,
+    train_dataset,
+    val_dataset,
+    test_dataset,
+    strategy='none',
+    alpha=1.0,
+    beta=0.5,
+    gamma=0.3,
+):
+    """Train and evaluate multitask Transformer (sentiment + rating + aspect)."""
+    print(f"\nTraining {model_name} in multi-task mode with {strategy} strategy...")
+
+    if model_name == 'PhoBERT':
+        base_model_name = 'vinai/phobert-base'
+    elif model_name == 'XLM-RoBERTa':
+        base_model_name = 'xlm-roberta-base'
+    else:
+        raise ValueError(f'Unsupported model for multi-task: {model_name}')
+
+    model = MultiTaskTransformerClassifier(base_model_name).to(device)
+
+    train_loader = create_train_loader(train_dataset, CONFIG['batch_size_transformer'], strategy)
+    val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size_transformer'])
+    test_loader = DataLoader(test_dataset, batch_size=CONFIG['batch_size_transformer'])
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=CONFIG['learning_rate_transformer'],
+        weight_decay=CONFIG['weight_decay_transformer'],
+    )
+
+    if strategy == 'class_weights':
+        class_weights = get_class_weights(train_dataset.labels)
+        sentiment_loss = nn.CrossEntropyLoss(
+            weight=class_weights,
+            label_smoothing=CONFIG['label_smoothing'],
+        )
+    else:
+        sentiment_loss = nn.CrossEntropyLoss(label_smoothing=CONFIG['label_smoothing'])
+
+    losses = {
+        'sentiment': sentiment_loss,
+        'rating': nn.CrossEntropyLoss(),
+        'aspect': nn.BCEWithLogitsLoss(),
+    }
+    weights = {'alpha': alpha, 'beta': beta, 'gamma': gamma}
+
+    best_val_f1 = -1
+    patience_counter = 0
+    train_losses, val_losses = [], []
+    start_time = time.time()
+
+    model_path = os.path.join(args.models_dir, f'{model_name}_{strategy}_multitask_best.pt')
+
+    for epoch in range(CONFIG['num_epochs']):
+        train_loss, train_f1 = train_epoch_multitask(
+            model, train_loader, optimizer, losses, weights, device
+        )
+        val_metrics = evaluate_multitask(model, val_loader, losses, weights, device)
+        val_loss = val_metrics['loss']
+        val_f1 = val_metrics['macro_f1']
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
+        print(
+            f"Epoch {epoch+1}/{CONFIG['num_epochs']}: "
+            f"Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, "
+            f"Sent-F1={val_f1:.4f}, Rating-MAE={val_metrics['rating_mae']:.4f}, "
+            f"Aspect-F1={val_metrics['aspect_f1']:.4f}"
+        )
+
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
+            patience_counter = 0
+            torch.save(model.state_dict(), model_path)
+        else:
+            patience_counter += 1
+
+        if patience_counter >= CONFIG['patience']:
+            print(f"Early stopping at epoch {epoch+1}")
+            break
+
+    train_time = (time.time() - start_time) / 60
+
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    best_metrics = evaluate_multitask(model, test_loader, losses, weights, device)
+    best_metrics['train_time'] = train_time
+    best_metrics['best_val_macro_f1'] = best_val_f1
+
+    all_results['training_history'][f'{model_name}_{strategy}_multitask'] = {
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'best_val_macro_f1': best_val_f1,
+    }
+
+    del model, optimizer, sentiment_loss, train_loader, val_loader, test_loader
+    cleanup_memory()
+    return best_metrics
+
+
 def run_all_experiments(args):
     """Run complete experimental pipeline"""
 
@@ -454,6 +700,7 @@ def run_all_experiments(args):
         'training_history': {}
     }
     prediction_store = {}
+    transformer_metrics_store = {}
     
     print("="*60)
     print("Starting Complete Experimental Pipeline")
@@ -613,6 +860,7 @@ def run_all_experiments(args):
                 'predictions': metrics['predictions'],
                 'true_labels': metrics['true_labels'],
             }
+            transformer_metrics_store[(model_name, strategy)] = metrics
             
             # Store results
             all_results['overall_performance'].append({
@@ -678,6 +926,112 @@ def run_all_experiments(args):
 
     aspect_df = compute_aspect_table(best_predictions, test_df, preferred_models)
     all_results['aspect_performance'] = aspect_df.to_dict(orient='records')
+
+    # ====================
+    # Multi-task results (Table 6)
+    # ====================
+    print("\n" + "="*60)
+    print("Computing Single vs Multi-task Results")
+    print("="*60)
+
+    multitask_rows = []
+    for model_name in transformer_models:
+        model_rows = [
+            row for row in all_results['overall_performance']
+            if row['Model'] == model_name
+        ]
+        if not model_rows:
+            continue
+
+        best_single_row = max(model_rows, key=lambda x: x['Macro-F1'])
+        best_single_strategy = best_single_row['Strategy']
+        single_time = np.nan
+        single_metrics = transformer_metrics_store.get((model_name, best_single_strategy))
+        if single_metrics:
+            single_time = single_metrics.get('train_time', np.nan)
+
+        multitask_rows.append({
+            'Model': f'{model_name} (Single)',
+            'Sentiment F1': best_single_row['Macro-F1'],
+            'Rating MAE': np.nan,
+            'Aspect F1': np.nan,
+            'Time (min)': single_time,
+        })
+
+    if args.run_multitask:
+        print("\n" + "="*60)
+        print("Training Multi-task Transformer Models")
+        print("="*60)
+
+        if args.multitask_strategy not in {'none', 'class_weights'}:
+            raise ValueError(
+                'Multi-task currently supports strategies: none, class_weights'
+            )
+
+        y_train_rating = model_train_df['rating_label'].values
+        y_val_rating = val_df['rating_label'].values
+        y_test_rating = test_df['rating_label'].values
+
+        y_train_aspect = model_train_df['aspect_encoded'].tolist()
+        y_val_aspect = val_df['aspect_encoded'].tolist()
+        y_test_aspect = test_df['aspect_encoded'].tolist()
+
+        for model_name in transformer_models:
+            if model_name == 'PhoBERT':
+                tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
+            else:
+                tokenizer = AutoTokenizer.from_pretrained('xlm-roberta-base')
+
+            mt_train_dataset = TransformerDataset(
+                X_train_text,
+                y_train,
+                tokenizer,
+                max_len=CONFIG['max_len'],
+                ratings=y_train_rating,
+                aspects=y_train_aspect,
+                multi_task=True,
+            )
+            mt_val_dataset = TransformerDataset(
+                X_val_text,
+                y_val,
+                tokenizer,
+                max_len=CONFIG['max_len'],
+                ratings=y_val_rating,
+                aspects=y_val_aspect,
+                multi_task=True,
+            )
+            mt_test_dataset = TransformerDataset(
+                X_test_text,
+                y_test,
+                tokenizer,
+                max_len=CONFIG['max_len'],
+                ratings=y_test_rating,
+                aspects=y_test_aspect,
+                multi_task=True,
+            )
+
+            mt_metrics = train_multitask_transformer_model(
+                model_name,
+                mt_train_dataset,
+                mt_val_dataset,
+                mt_test_dataset,
+                strategy=args.multitask_strategy,
+                alpha=args.alpha,
+                beta=args.beta,
+                gamma=args.gamma,
+            )
+
+            multitask_rows.append({
+                'Model': f'{model_name} (Multi)',
+                'Sentiment F1': mt_metrics['macro_f1'],
+                'Rating MAE': mt_metrics['rating_mae'],
+                'Aspect F1': mt_metrics['aspect_f1'],
+                'Time (min)': mt_metrics['train_time'],
+            })
+
+            save_intermediate_results(args.output_dir)
+
+    all_results['multitask_performance'] = multitask_rows
     
     # Save all results
     print("\n" + "="*60)
@@ -688,11 +1042,13 @@ def run_all_experiments(args):
     table2_path = os.path.join(args.output_dir, 'results_table2_overall.csv')
     table3_path = os.path.join(args.output_dir, 'results_table3_perclass.csv')
     table5_path = os.path.join(args.output_dir, 'results_table5_aspect.csv')
+    table6_path = os.path.join(args.output_dir, 'results_table6_multitask.csv')
     history_path = os.path.join(args.output_dir, 'training_history.json')
     
     pd.DataFrame(all_results['overall_performance']).to_csv(table2_path, index=False)
     pd.DataFrame(all_results['per_class_performance']).to_csv(table3_path, index=False)
     pd.DataFrame(all_results['aspect_performance']).to_csv(table5_path, index=False)
+    pd.DataFrame(all_results['multitask_performance']).to_csv(table6_path, index=False)
     
     # Save training history
     with open(history_path, 'w') as f:
@@ -702,6 +1058,7 @@ def run_all_experiments(args):
     print(f"  - {table2_path}")
     print(f"  - {table3_path}")
     print(f"  - {table5_path}")
+    print(f"  - {table6_path}")
     print(f"  - {history_path}")
     
     return all_results
@@ -725,6 +1082,17 @@ if __name__ == '__main__':
                        help='Batch size for Transformer models (default: 4)')
     parser.add_argument('--val-ratio', type=float, default=0.1,
                        help='Validation ratio within training split (default: 0.1)')
+    parser.add_argument('--run-multitask', action='store_true',
+                       help='Enable multi-task training for Transformer models')
+    parser.add_argument('--multitask-strategy', type=str, default='none',
+                       choices=['none', 'class_weights'],
+                       help='Sampling strategy for multi-task training (default: none)')
+    parser.add_argument('--alpha', type=float, default=1.0,
+                       help='Weight for sentiment loss in multi-task objective')
+    parser.add_argument('--beta', type=float, default=0.5,
+                       help='Weight for rating loss in multi-task objective')
+    parser.add_argument('--gamma', type=float, default=0.3,
+                       help='Weight for aspect loss in multi-task objective')
     
     args = parser.parse_args()
     
@@ -744,6 +1112,7 @@ if __name__ == '__main__':
     print(f"  Batch size (RNN): {args.batch_size_rnn}")
     print(f"  Batch size (Transformer): {args.batch_size_transformer}")
     print(f"  Validation ratio (within train): {args.val_ratio}")
+    print(f"  Run multi-task: {args.run_multitask}")
     
     results = run_all_experiments(args)
     print("\n" + "="*60)
