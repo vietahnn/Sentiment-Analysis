@@ -27,6 +27,19 @@ np.random.seed(SEED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _normalize_aspect_name(name: str) -> str:
+    """Map raw aspect aliases from dataset into canonical aspect labels."""
+    if name is None:
+        return ""
+
+    cleaned = str(name).strip()
+    alias_map = {
+        "UI_UX": "UI/UX",
+        "Customer_Support": "Customer Support",
+    }
+    return alias_map.get(cleaned, cleaned)
+
+
 def _normalize_sentiment_label(value):
     """Map raw sentiment text into class ids: neg=0, neu=1, pos=2."""
     if pd.isna(value):
@@ -86,7 +99,11 @@ def load_data(file_path: str) -> pd.DataFrame:
         if pd.isna(aspect_text):
             return [0] * len(aspect_categories)
 
-        raw_parts = [part.strip() for part in str(aspect_text).split("|")]
+        raw_parts = {
+            _normalize_aspect_name(part)
+            for part in str(aspect_text).split("|")
+            if str(part).strip()
+        }
         encoded = [1 if category in raw_parts else 0 for category in aspect_categories]
         return encoded
 

@@ -31,6 +31,19 @@ ASPECT_CATEGORIES = [
     'General',
 ]
 
+
+def _normalize_aspect_name(name: str) -> str:
+    """Map raw aspect aliases from dataset into canonical aspect labels."""
+    if name is None:
+        return ''
+
+    cleaned = str(name).strip()
+    alias_map = {
+        'UI_UX': 'UI/UX',
+        'Customer_Support': 'Customer Support',
+    }
+    return alias_map.get(cleaned, cleaned)
+
 # Configuration
 CONFIG = {
     'batch_size_rnn': 16,
@@ -68,7 +81,11 @@ def _extract_aspect_set(aspect_value):
     if not raw:
         return {'General'}
 
-    parts = [part.strip() for part in raw.split('|') if part.strip()]
+    parts = [
+        _normalize_aspect_name(part)
+        for part in raw.split('|')
+        if part.strip()
+    ]
     if not parts:
         return {'General'}
 
