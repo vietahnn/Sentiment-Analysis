@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 from train_models import *
 import json
 import os
@@ -46,6 +48,60 @@ y_train = train_df['sentiment_label'].values
 X_test_text = test_df['content'].values
 y_test = test_df['sentiment_label'].values
 
+
+def split_train_val_chronological(train_slice, val_ratio=0.1):
+    """Match the run_experiments split before building RNN vocab."""
+    val_size = max(1, int(len(train_slice) * val_ratio))
+    if val_size >= len(train_slice):
+        val_size = max(1, len(train_slice) - 1)
+    return train_slice[:-val_size], train_slice[-val_size:]
+
+
+def resample_text_data(texts, labels, strategy='none'):
+    """Same text-safe resampling logic used in run_experiments.py."""
+    X = np.array(texts, dtype=object)
+    y = np.array(labels)
+
+    if strategy in ['none', 'class_weights']:
+        return X, y
+
+    if strategy == 'smote':
+        ros = RandomOverSampler(random_state=SEED)
+        X_res, y_res = ros.fit_resample(X.reshape(-1, 1), y)
+        return X_res.flatten(), y_res
+
+    if strategy == 'hybrid':
+        class_counts = pd.Series(y).value_counts().to_dict()
+        majority_class = max(class_counts, key=class_counts.get)
+        minority_counts = [count for cls, count in class_counts.items() if cls != majority_class]
+
+        if minority_counts:
+            target_majority = max(minority_counts) * 2
+            target_majority = min(target_majority, class_counts[majority_class])
+            rus = RandomUnderSampler(
+                random_state=SEED,
+                sampling_strategy={majority_class: target_majority}
+            )
+            X_under, y_under = rus.fit_resample(X.reshape(-1, 1), y)
+        else:
+            X_under, y_under = X.reshape(-1, 1), y
+
+        balanced_target = int(pd.Series(y_under).value_counts().max())
+        ros_strategy = {
+            cls: balanced_target
+            for cls, count in pd.Series(y_under).value_counts().to_dict().items()
+            if count < balanced_target
+        }
+
+        if ros_strategy:
+            ros = RandomOverSampler(random_state=SEED, sampling_strategy=ros_strategy)
+            X_balanced, y_balanced = ros.fit_resample(X_under, y_under)
+            return X_balanced.flatten(), y_balanced
+
+        return X_under.flatten(), y_under
+
+    return X, y
+
 print(f"Test set size: {len(test_df)} samples")
 print(f"Sentiment distribution:")
 print(test_df['sentiment'].value_counts())
@@ -64,8 +120,13 @@ def test_rnn_model(model_name, strategy='hybrid'):
         print(f"❌ Checkpoint not found:{checkpoint_path}")
         return None
     
+    # Recreate the exact train vocabulary path used in training.
+    model_train_texts, _ = split_train_val_chronological(X_train_text, val_ratio=0.1)
+    model_train_labels, _ = split_train_val_chronological(y_train, val_ratio=0.1)
+    X_train_resampled, y_train_resampled = resample_text_data(model_train_texts, model_train_labels, strategy)
+
     # Create datasets
-    train_dataset = SentimentDataset(X_train_text, y_train, max_len=128)
+    train_dataset = SentimentDataset(X_train_resampled, y_train_resampled, max_len=128)
     test_dataset = SentimentDataset(X_test_text, y_test, 
                                    vocab=train_dataset.vocab, max_len=128)
     vocab_size = len(train_dataset.vocab)
